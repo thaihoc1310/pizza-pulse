@@ -44,3 +44,4 @@ kubectl auth can-i create sparkapplications.sparkoperator.k8s.io \
   
 kubectl get secret pp-airflow-metadata -n pizza-pulse -o yaml
 kubectl --namespace pizza-pulse  port-forward svc/pp-minio-console 9001:9001
+kubectl exec -it deploy/pp-airflow-scheduler -n pizza-pulse -- bash

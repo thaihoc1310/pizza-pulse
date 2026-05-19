@@ -4231,7 +4231,7 @@ dags:
 
     # Subpath within the repo where dags are located.
     # Should be "" if dags are at repo root
-    subPath: "dags"
+    subPath: "airflow"
 
     # If your repo needs a username/password, you can load them to a k8s secret
     #

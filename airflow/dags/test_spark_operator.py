@@ -1,0 +1,30 @@
+from datetime import datetime
+
+from airflow import DAG
+from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
+from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import SparkKubernetesSensor
+
+with DAG(
+    dag_id="test_spark_operator",
+    start_date=datetime(2026, 1, 1),
+    schedule=None,
+    catchup=False,
+    tags=["pizza-pulse", "spark"],
+):
+    submit = SparkKubernetesOperator(
+        task_id="submit_spark_pi",
+        namespace="pizza-pulse",
+        application_file="/opt/airflow/dags/repo/spark-apps/spark-pi.yaml",
+        kubernetes_conn_id="kubernetes_default",
+        do_xcom_push=True,
+    )
+
+    monitor = SparkKubernetesSensor(
+        task_id="monitor_spark_pi",
+        namespace="pizza-pulse",
+        application_name="{{ task_instance.xcom_pull(task_ids='submit_spark_pi')['metadata']['name'] }}",
+        kubernetes_conn_id="kubernetes_default",
+        attach_log=True,
+    )
+
+    submit >> monitor
