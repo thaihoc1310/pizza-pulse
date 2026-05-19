@@ -1,0 +1,55 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pp-airflow-spark-role
+  namespace: pizza-pulse
+rules:
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications
+      - sparkapplications/status
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - delete
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+      - services
+      - configmaps
+      - events
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - delete
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pp-airflow-spark-rolebinding
+  namespace: pizza-pulse
+subjects:
+  - kind: ServiceAccount
+    name: pp-airflow-scheduler
+    namespace: pizza-pulse
+  - kind: ServiceAccount
+    name: pp-airflow-dag-processor
+    namespace: pizza-pulse
+  - kind: ServiceAccount
+    name: pp-airflow-api-server
+    namespace: pizza-pulse
+roleRef:
+  kind: Role
+  name: pp-airflow-spark-role
+  apiGroup: rbac.authorization.k8s.io
