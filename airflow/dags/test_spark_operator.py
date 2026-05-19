@@ -10,11 +10,12 @@ with DAG(
     schedule=None,
     catchup=False,
     tags=["pizza-pulse", "spark"],
+    template_searchpath=["/opt/airflow/dags/repo/airflow/spark-apps"],
 ):
     submit = SparkKubernetesOperator(
         task_id="submit_spark_pi",
         namespace="pizza-pulse",
-        application_file="/opt/airflow/dags/repo/spark-apps/spark-pi.yaml",
+        application_file="spark-pi.yaml",
         kubernetes_conn_id="kubernetes_default",
         do_xcom_push=True,
     )

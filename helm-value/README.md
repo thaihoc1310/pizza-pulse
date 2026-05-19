@@ -31,7 +31,7 @@ helm upgrade --install pp-mlflow community-charts/mlflow \
 
 kubectl create secret generic pp-airflow-metadata \
   -n pizza-pulse \
-  --from-literal=connection="postgresql://postgres:${POSTGRES_PASSWORD}@pp-postgre-postgresql:5432/airflow"
+  --from-literal=connection="postgresql://postgres:admin@pp-postgre-postgresql:5432/airflow"
 
 helm upgrade --install pp-airflow apache-airflow/airflow \
   -n pizza-pulse \
@@ -41,7 +41,14 @@ kubectl apply -f airflow-rbac-spark.yaml
 kubectl auth can-i create sparkapplications.sparkoperator.k8s.io \
   -n pizza-pulse \
   --as=system:serviceaccount:pizza-pulse:pp-airflow-scheduler
-  
+
+kubectl delete secret pp-airflow-minio -n pizza-pulse
+
+kubectl create secret generic pp-airflow-minio \
+  -n pizza-pulse \
+  --from-literal=AWS_ACCESS_KEY_ID='' \
+  --from-literal=AWS_SECRET_ACCESS_KEY=''
+
 kubectl get secret pp-airflow-metadata -n pizza-pulse -o yaml
 kubectl --namespace pizza-pulse  port-forward svc/pp-minio-console 9001:9001
 kubectl exec -it deploy/pp-airflow-scheduler -n pizza-pulse -- bash

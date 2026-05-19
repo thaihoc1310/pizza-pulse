@@ -380,7 +380,19 @@ allowPodLaunching: true
 allowJobLaunching: false
 
 # Environment variables for all Airflow containers
-env: []
+env:
+  - name: AIRFLOW__LOGGING__REMOTE_LOGGING
+    value: "True"
+  - name: AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER
+    value: "s3://pp-airflow-logs"
+  - name: AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID
+    value: "aws_default"
+  - name: AIRFLOW__LOGGING__DELETE_LOCAL_LOGS
+    value: "False"
+  - name: AIRFLOW_CONN_AWS_DEFAULT
+    value: >-
+      {"conn_type":"aws","extra":{"endpoint_url":"http://pp-minio:9000","region_name":"us-east-1"}}
+
 # - name: ""
 #   value: ""
 
@@ -478,7 +490,13 @@ extraEnv: ~
 
 # Extra envFrom 'items' that will be added to the definition of Airflow containers
 # A string is expected (templated).
-extraEnvFrom: ~
+secret:
+  - envName: AWS_ACCESS_KEY_ID
+    secretName: pp-airflow-minio
+    secretKey: AWS_ACCESS_KEY_ID
+  - envName: AWS_SECRET_ACCESS_KEY
+    secretName: pp-airflow-minio
+    secretKey: AWS_SECRET_ACCESS_KEY
 # extraEnvFrom: |
 #   - secretRef:
 #       name: '{{ .Release.Name }}-airflow-connections'
@@ -2733,7 +2751,7 @@ webserver:
 
 # Airflow Triggerer Config
 triggerer:
-  enabled: true
+  enabled: false
 
   # Number of Airflow triggerers in the Deployment
   replicas: 1
@@ -3387,7 +3405,7 @@ statsd:
   # Add custom annotations to the StatsD ConfigMap
   configMapAnnotations: {}
 
-  enabled: true
+  enabled: false
 
   # Max number of old ReplicaSets to retain
   revisionHistoryLimit: ~
@@ -4367,7 +4385,7 @@ logs:
 
   persistence:
     # Enable persistent volume for storing logs
-    enabled: true
+    enabled: false
 
     # Volume size for logs
     size: 5Gi
