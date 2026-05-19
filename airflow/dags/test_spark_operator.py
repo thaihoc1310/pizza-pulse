@@ -14,7 +14,7 @@ with DAG(
     schedule=None,
     catchup=False,
     tags=["pizza-pulse", "spark"],
-    template_searchpath=["/opt/airflow/dags/repo/airflow/spark-apps"],
+    template_searchpath=["/opt/airflow/dags/repo/spark-apps"],
 ):
     with TaskGroup(group_id="spark_pi") as spark_pi:
         submit = SparkKubernetesOperator(
