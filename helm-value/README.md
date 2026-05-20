@@ -274,7 +274,20 @@ Expected result:
 yes
 ```
 
-## 12. Port Forward
+## 12. Build Batch Job Image
+
+The `pizza_batch_mlops` DAG expects this image in `spark-apps/pizza-batch-*.yaml` and the training/compare Kubernetes pods:
+
+```bash
+cd ..
+docker build -t thaihoc285/ppbatch-pipeline:0.0.1 jobs/batch_pipeline
+docker push thaihoc285/ppbatch-pipeline:0.0.1
+cd helm-value
+```
+
+If you use another registry or tag, update `BATCH_IMAGE` in `airflow/dags/pizza_batch_mlops.py` and the image fields in `spark-apps/pizza-batch-*.yaml`.
+
+## 13. Port Forward
 
 Use the repo-root script to forward services for local access. If you are in `helm-value/`, run:
 
@@ -303,7 +316,7 @@ Stop port-forwarding:
 
 Note: Kafka port-forwarding here uses the bootstrap service `pp-kafka-kafka-bootstrap`. Some local Kafka clients may fail because brokers advertise internal Kubernetes DNS names. For stable local Kafka clients, configure a Strimzi external listener.
 
-## 13. Useful Commands
+## 14. Useful Commands
 
 Show all resources in the namespace:
 
@@ -340,7 +353,7 @@ kubectl run jar-check \
   -- bash -lc "ls -l /opt/spark/jars"
 ```
 
-## 14. Cleanup
+## 15. Cleanup
 
 Stop port-forwarding first:
 

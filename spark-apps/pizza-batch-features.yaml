@@ -1,0 +1,78 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: "pizza-batch-features-{{ ts_nodash | lower }}"
+  namespace: pizza-pulse
+spec:
+  type: Python
+  mode: cluster
+
+  image: thaihoc285/ppbatch-pipeline:0.0.1
+  imagePullPolicy: Always
+
+  mainApplicationFile: local:///opt/spark/jobs/feature_engineering.py
+  sparkVersion: "3.5.0"
+
+  restartPolicy:
+    type: Never
+
+  sparkConf:
+    spark.kubernetes.executor.deleteOnTermination: "false"
+    spark.sql.execution.arrow.pyspark.enabled: "true"
+
+  driver:
+    cores: 1
+    memory: "1g"
+    serviceAccount: pp-spark-operator-spark
+    env: &batchEnv
+      - name: POSTGRES_HOST
+        value: pp-postgre-postgresql
+      - name: POSTGRES_PORT
+        value: "5432"
+      - name: POSTGRES_DB
+        value: pizza_serving
+      - name: POSTGRES_USER
+        value: postgres
+      - name: POSTGRES_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: pp-postgre-postgresql
+            key: postgres-password
+
+      - name: MINIO_ENDPOINT
+        value: http://pp-minio:9000
+      - name: MINIO_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: pp-airflow-minio
+            key: AWS_ACCESS_KEY_ID
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: pp-airflow-minio
+            key: AWS_SECRET_ACCESS_KEY
+      - name: AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            name: pp-airflow-minio
+            key: AWS_ACCESS_KEY_ID
+      - name: AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: pp-airflow-minio
+            key: AWS_SECRET_ACCESS_KEY
+
+      - name: LAKEHOUSE_ROOT
+        value: s3a://pp-lakehouse
+      - name: PIPELINE_TIMEZONE
+        value: Asia/Bangkok
+      - name: BATCH_RUN_TAG
+        value: "{{ ts_nodash | lower }}"
+      - name: MAX_FEATURE_LOOKBACK_DAYS
+        value: "730"
+
+  executor:
+    instances: 3
+    cores: 1
+    memory: "1g"
+    env: *batchEnv
