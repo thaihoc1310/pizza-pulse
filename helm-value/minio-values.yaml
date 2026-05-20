@@ -435,6 +435,11 @@ makeServiceAccountJob:
 ## List of buckets to be created after minio install
 ##
 buckets:
+  - name: pp-lakehouse
+    policy: none
+    purge: false
+    versioning: false
+    objectlocking: false
   - name: pp-mlflow-artifacts
     policy: none
     purge: false
@@ -605,4 +610,3 @@ etcd:
   corednsPathPrefix: ""
   clientCert: ""
   clientCertKey: ""
-

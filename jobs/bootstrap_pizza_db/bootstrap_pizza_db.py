@@ -3,9 +3,9 @@ import os
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col,
+    coalesce,
     concat_ws,
     explode,
-    regexp_replace,
     split,
     to_timestamp,
     trim,
@@ -92,9 +92,15 @@ def main() -> None:
         .withColumn("total_price", col("total_price").cast("double"))
         .withColumn(
             "order_ts",
-            to_timestamp(
-                concat_ws(" ", col("order_date"), col("order_time")),
-                "M/d/yyyy H:mm:ss",
+            coalesce(
+                to_timestamp(
+                    concat_ws(" ", col("order_date"), col("order_time")),
+                    "M/d/yyyy H:mm:ss",
+                ),
+                to_timestamp(
+                    concat_ws(" ", col("order_date"), col("order_time")),
+                    "d-M-yyyy H:mm:ss",
+                ),
             ),
         )
         .select(
