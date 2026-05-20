@@ -117,7 +117,7 @@ def python_batch_pod(
 with DAG(
     dag_id="pizza_batch_mlops",
     start_date=datetime(2026, 1, 1),
-    schedule="None",
+    schedule=None,
     catchup=False,
     max_active_runs=1,
     default_args={"retries": 1, "retry_delay": timedelta(minutes=5)},
