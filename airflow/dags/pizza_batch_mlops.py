@@ -3,8 +3,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from airflow.providers.cncf.kubernetes.operators.spark_kubernetes import SparkKubernetesOperator
-from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import SparkKubernetesSensor
-from airflow.utils.task_group import TaskGroup
 from kubernetes.client import models as k8s
 
 
@@ -15,40 +13,25 @@ BATCH_IMAGE = "thaihoc285/ppbatch-pipeline:0.0.1"
 SPARK_APPLICATIONS = {
     "etl_orders": {
         "application_file": "pizza-batch-etl.yaml",
-        "application_name": "pizza-batch-etl-{{ ts_nodash | lower }}",
     },
     "feature_engineering": {
         "application_file": "pizza-batch-features.yaml",
-        "application_name": "pizza-batch-features-{{ ts_nodash | lower }}",
     },
 }
 
 
-def spark_application_group(group_id: str, application_file: str, application_name: str) -> TaskGroup:
-    with TaskGroup(group_id=group_id) as group:
-        submit = SparkKubernetesOperator(
-            task_id="submit",
-            namespace=NAMESPACE,
-            application_file=application_file,
-            kubernetes_conn_id=KUBERNETES_CONN_ID,
-            do_xcom_push=False,
-            random_name_suffix=False,
-            get_logs=False,
-            delete_on_termination=False,
-            reattach_on_restart=False,
-        )
-
-        monitor = SparkKubernetesSensor(
-            task_id="monitor",
-            namespace=NAMESPACE,
-            application_name=application_name,
-            kubernetes_conn_id=KUBERNETES_CONN_ID,
-            attach_log=True,
-        )
-
-        submit >> monitor
-
-    return group
+def spark_application_task(task_id: str, application_file: str) -> SparkKubernetesOperator:
+    return SparkKubernetesOperator(
+        task_id=task_id,
+        namespace=NAMESPACE,
+        application_file=application_file,
+        kubernetes_conn_id=KUBERNETES_CONN_ID,
+        do_xcom_push=False,
+        random_name_suffix=False,
+        get_logs=True,
+        delete_on_termination=False,
+        reattach_on_restart=False,
+    )
 
 
 def secret_env(name: str, secret_name: str, secret_key: str) -> k8s.V1EnvVar:
@@ -105,6 +88,7 @@ def python_batch_pod(
         kubernetes_conn_id=KUBERNETES_CONN_ID,
         service_account_name="pp-airflow-scheduler",
         get_logs=True,
+        on_finish_action="keep_pod",
         do_xcom_push=False,
         env_vars=batch_env_vars(extra_env),
         container_resources=k8s.V1ResourceRequirements(
@@ -124,8 +108,8 @@ with DAG(
     tags=["pizza-pulse", "batch", "mlops", "mlflow"],
     template_searchpath=["/opt/airflow/dags/repo/spark-apps"],
 ):
-    etl_orders = spark_application_group("etl_orders", **SPARK_APPLICATIONS["etl_orders"])
-    feature_engineering = spark_application_group(
+    etl_orders = spark_application_task("etl_orders", **SPARK_APPLICATIONS["etl_orders"])
+    feature_engineering = spark_application_task(
         "feature_engineering",
         **SPARK_APPLICATIONS["feature_engineering"],
     )
