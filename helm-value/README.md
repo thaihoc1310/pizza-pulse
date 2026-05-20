@@ -42,8 +42,6 @@ kubectl auth can-i create sparkapplications.sparkoperator.k8s.io \
   -n pizza-pulse \
   --as=system:serviceaccount:pizza-pulse:pp-airflow-scheduler
 
-kubectl delete secret pp-airflow-minio -n pizza-pulse
-
 kubectl create secret generic pp-airflow-minio \
   -n pizza-pulse \
   --from-literal=AWS_ACCESS_KEY_ID='' \

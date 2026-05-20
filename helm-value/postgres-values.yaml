@@ -164,7 +164,7 @@ auth:
   password: "pizza"
   ## @param auth.database Name for a custom database to create
   ##
-  database: "pizza_dashboard"
+  database: "pizza_serving"
   ## @param auth.replicationUsername Name of the replication user
   ##
   replicationUsername: repl_user
