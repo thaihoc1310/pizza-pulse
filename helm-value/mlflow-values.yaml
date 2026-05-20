@@ -286,11 +286,11 @@ artifactRoot:
     # -- Existing secret for AWS IAM user AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets.
     existingSecret:
       # -- This is for setting up the AWS IAM user secrets existing secret name.
-      name: ""
+      name: "pp-airflow-minio"
       # -- This is for setting up the key for AWS_ACCESS_KEY_ID secret. If it's set, awsAccessKeyId will be ignored.
-      keyOfAccessKeyId: ""
+      keyOfAccessKeyId: "AWS_ACCESS_KEY_ID"
       # -- This is for setting up the key for AWS_SECRET_ACCESS_KEY secret. If it's set, awsSecretAccessKey will be ignored.
-      keyOfSecretAccessKey: ""
+      keyOfSecretAccessKey: "AWS_SECRET_ACCESS_KEY"
 
   # -- Specifies if you want to use Google Cloud Storage Mlflow Artifact Root
   gcs:
@@ -458,6 +458,7 @@ extraEnvVars:
   MLFLOW_S3_ENDPOINT_URL: "http://pp-minio:9000"
   MLFLOW_S3_IGNORE_TLS: "true"
   AWS_DEFAULT_REGION: "us-east-1"
+  MLFLOW_SERVER_ALLOWED_HOSTS: "pp-mlflow,pp-mlflow:80,pp-mlflow.pizza-pulse,pp-mlflow.pizza-pulse:80,pp-mlflow.pizza-pulse.svc,pp-mlflow.pizza-pulse.svc:80,pp-mlflow.pizza-pulse.svc.cluster.local,pp-mlflow.pizza-pulse.svc.cluster.local:80,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000"
   # MLFLOW_S3_IGNORE_TLS: true  # Skip TLS certificate verification for S3
   # MLFLOW_S3_UPLOAD_EXTRA_ARGS: '{"ServerSideEncryption": "aws:kms", "SSEKMSKeyId": "1234"}'  # Extra S3 upload arguments
   # AWS_DEFAULT_REGION: my_region  # AWS default region
@@ -589,4 +590,3 @@ readinessProbe:
   periodSeconds: 30
   timeoutSeconds: 3
   failureThreshold: 5
-
