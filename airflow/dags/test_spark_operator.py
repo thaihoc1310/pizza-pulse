@@ -6,7 +6,7 @@ from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import SparkKube
 from airflow.utils.task_group import TaskGroup
 
 
-APP_NAME = "spark-pi-{{ ts_nodash | lower }}-try{{ ti.try_number }}"
+APP_NAME = "spark-pi-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}-try{{ ti.try_number }}"
 
 with DAG(
     dag_id="test_spark_operator",

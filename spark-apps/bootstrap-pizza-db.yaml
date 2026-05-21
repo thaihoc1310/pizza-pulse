@@ -1,7 +1,7 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: "bootstrap-pizza-db-{{ ts_nodash | lower }}"
+  name: "bootstrap-pizza-db-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}"
   namespace: pizza-pulse
 spec:
   type: Python

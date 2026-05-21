@@ -61,7 +61,7 @@ def batch_env_vars(extra_env: list[k8s.V1EnvVar] | None = None) -> list[k8s.V1En
         k8s.V1EnvVar(name="MLFLOW_S3_IGNORE_TLS", value="true"),
         k8s.V1EnvVar(name="AWS_DEFAULT_REGION", value="us-east-1"),
         k8s.V1EnvVar(name="LAKEHOUSE_ROOT", value="s3a://pp-lakehouse"),
-        k8s.V1EnvVar(name="BATCH_RUN_TAG", value="{{ ts_nodash | lower }}"),
+        k8s.V1EnvVar(name="BATCH_RUN_TAG", value="{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}"),
         k8s.V1EnvVar(name="MODEL_NAME", value="pizza_hourly_demand"),
     ]
     if extra_env:
@@ -117,7 +117,7 @@ with DAG(
     )
     train_lightgbm = python_batch_pod(
         task_id="train_lightgbm",
-        pod_name="pizza-train-lightgbm-{{ ts_nodash | lower }}",
+        pod_name="pizza-train-lightgbm-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}",
         script_path="/opt/spark/jobs/train_candidate_model.py",
         extra_env=[k8s.V1EnvVar(name="MODEL_FLAVOR", value="lightgbm")],
         memory_request="4Gi",
@@ -127,7 +127,7 @@ with DAG(
     )
     train_catboost = python_batch_pod(
         task_id="train_catboost",
-        pod_name="pizza-train-catboost-{{ ts_nodash | lower }}",
+        pod_name="pizza-train-catboost-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}",
         script_path="/opt/spark/jobs/train_candidate_model.py",
         extra_env=[k8s.V1EnvVar(name="MODEL_FLAVOR", value="catboost")],
         memory_request="4Gi",
@@ -138,7 +138,7 @@ with DAG(
 
     compare_and_register_model = python_batch_pod(
         task_id="compare_and_register_model",
-        pod_name="pizza-compare-register-{{ ts_nodash | lower }}",
+        pod_name="pizza-compare-register-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}",
         script_path="/opt/spark/jobs/compare_and_register_model.py",
         extra_env=[
             k8s.V1EnvVar(name="MODEL_ALIAS", value="champion"),
