@@ -1,1 +1,3 @@
 .port-forward
+__pycache__/
+*.pyc

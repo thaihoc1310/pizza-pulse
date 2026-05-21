@@ -287,7 +287,27 @@ cd helm-value
 
 If you use another registry or tag, update `BATCH_IMAGE` in `airflow/dags/pizza_batch_mlops.py` and the image fields in `spark-apps/pizza-batch-*.yaml`.
 
-## 13. Port Forward
+## 13. Deploy Online Backend
+
+Build and push the online backend image:
+
+```bash
+cd ..
+docker build -t thaihoc285/pp-backend:0.0.1 services/pizza_backend
+docker push thaihoc285/pp-backend:0.0.1
+cd helm-value
+```
+
+Deploy the API service:
+
+```bash
+kubectl apply -f backend.yaml -n pizza-pulse
+kubectl -n pizza-pulse rollout status deployment/pp-backend
+```
+
+By default, `POST /orders` writes only to Kafka topic `pp.order.events`. PostgreSQL order writes are implemented but disabled with `POSTGRES_WRITE_ENABLED=false` in `backend.yaml`. `GET /pizzas` always reads PostgreSQL.
+
+## 14. Port Forward
 
 Use the repo-root script to forward services for local access. If you are in `helm-value/`, run:
 
@@ -307,6 +327,7 @@ Default local endpoints:
 | Kafka bootstrap | `localhost:9092` |
 | Kafka UI | `http://localhost:8082` |
 | Airflow API Server | `http://localhost:8080` |
+| Backend API | `http://localhost:8083` |
 
 Stop port-forwarding:
 
@@ -316,7 +337,16 @@ Stop port-forwarding:
 
 Note: Kafka port-forwarding here uses the bootstrap service `pp-kafka-kafka-bootstrap`. Some local Kafka clients may fail because brokers advertise internal Kubernetes DNS names. For stable local Kafka clients, configure a Strimzi external listener.
 
-## 14. Useful Commands
+Call the backend:
+
+```bash
+cd ..
+scripts/pizza-backend-client.py list-pizzas
+scripts/pizza-backend-client.py publish-order --input services/pizza_backend/examples/order.json
+scripts/pizza-backend-client.py publish-order
+```
+
+## 15. Useful Commands
 
 Show all resources in the namespace:
 
@@ -353,7 +383,7 @@ kubectl run jar-check \
   -- bash -lc "ls -l /opt/spark/jars"
 ```
 
-## 15. Cleanup
+## 16. Cleanup
 
 Stop port-forwarding first:
 
@@ -366,6 +396,7 @@ Delete Kafka custom resources before uninstalling the Strimzi operator:
 ```bash
 kubectl delete -f KafkaTopic.yaml -n pizza-pulse --ignore-not-found
 kubectl delete -f Kafka.yaml -n pizza-pulse --ignore-not-found
+kubectl delete -f backend.yaml -n pizza-pulse --ignore-not-found
 ```
 
 Uninstall releases:

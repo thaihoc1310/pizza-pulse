@@ -16,6 +16,7 @@ That guide covers the required Helm repositories, namespace creation, PostgreSQL
 - `airflow/dags/`: Airflow DAGs
 - `spark-apps/`: SparkApplication manifests
 - `jobs/`: Spark job code and Dockerfiles
+- `services/pizza_backend/`: FastAPI backend for pizza catalog and online order ingestion
 - `sql/`: Database schema
 - `dataset/`: Local sample data
 - `scripts/`: Local helper scripts
@@ -39,3 +40,28 @@ docker push manhhung1685/ppbatch-pipeline:0.0.1
 ```
 
 If you use a different registry or tag, update the image in `airflow/dags/pizza_batch_mlops.py` and the matching `spark-apps/pizza-batch-*.yaml` image fields.
+
+## Online Backend
+
+`services/pizza_backend/` provides the first online backend component:
+
+- `GET /pizzas` lists the pizza catalog from PostgreSQL.
+- `POST /orders` accepts an order with one or more line items.
+- The service publishes normalized JSON to Kafka topic `pp.order.events`.
+- PostgreSQL writes to `orders`, `order_items`, and ingredient stock are available but disabled by default with `POSTGRES_WRITE_ENABLED=false`.
+- `scripts/pizza-backend-client.py` can list pizzas, publish a JSON order, or generate demo orders interactively through the backend API.
+
+Build the image:
+
+```bash
+docker build -t thaihoc285/pp-backend:0.0.1 services/pizza_backend
+docker push thaihoc285/pp-backend:0.0.1
+```
+
+Deploy it:
+
+```bash
+kubectl apply -f helm-value/backend.yaml -n pizza-pulse
+```
+
+See [services/pizza_backend/README.md](services/pizza_backend/README.md) for payload examples and local commands.
