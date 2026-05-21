@@ -21,8 +21,8 @@ spec:
     spark.sql.execution.arrow.pyspark.enabled: "true"
 
   driver:
-    cores: 1
-    memory: "1g"
+    cores: 2
+    memory: "4g"
     serviceAccount: pp-spark-operator-spark
     env: &batchEnv
       - name: POSTGRES_HOST
@@ -71,6 +71,6 @@ spec:
 
   executor:
     instances: 3
-    cores: 1
-    memory: "1g"
+    cores: 2
+    memory: "4g"
     env: *batchEnv
