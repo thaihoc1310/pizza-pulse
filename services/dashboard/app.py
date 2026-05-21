@@ -150,49 +150,6 @@ def load_frames() -> dict[str, pd.DataFrame]:
             """,
             (LOW_STOCK_THRESHOLD,),
         ),
-        "actuals": safe_query(
-            """
-            WITH selected_day AS (
-                SELECT COALESCE(
-                    (SELECT MAX(target_hour)::date FROM demand_predictions),
-                    (SELECT MAX(order_hour)::date FROM online_hourly_demand),
-                    CURRENT_DATE
-                ) AS day
-            )
-            SELECT
-                date_trunc('hour', ohd.order_hour)::timestamp AS order_hour,
-                SUM(ohd.quantity)::double precision AS quantity,
-                SUM(ohd.revenue)::double precision AS revenue,
-                SUM(ohd.order_count)::bigint AS order_count,
-                COUNT(DISTINCT ohd.pizza_id)::int AS pizza_count
-            FROM online_hourly_demand ohd
-            CROSS JOIN selected_day sd
-            WHERE ohd.order_hour::date = sd.day
-            GROUP BY date_trunc('hour', ohd.order_hour)
-            ORDER BY order_hour
-            """
-        ),
-        "actual_categories": safe_query(
-            """
-            WITH selected_day AS (
-                SELECT COALESCE(
-                    (SELECT MAX(target_hour)::date FROM demand_predictions),
-                    (SELECT MAX(order_hour)::date FROM online_hourly_demand),
-                    CURRENT_DATE
-                ) AS day
-            )
-            SELECT
-                COALESCE(ohd.pizza_category, 'Unknown') AS pizza_category,
-                SUM(ohd.quantity)::double precision AS quantity,
-                SUM(ohd.revenue)::double precision AS revenue,
-                SUM(ohd.order_count)::bigint AS order_count
-            FROM online_hourly_demand ohd
-            CROSS JOIN selected_day sd
-            WHERE ohd.order_hour::date = sd.day
-            GROUP BY COALESCE(ohd.pizza_category, 'Unknown')
-            ORDER BY quantity DESC
-            """
-        ),
         "status": safe_query(
             """
             SELECT
@@ -219,7 +176,6 @@ def normalize_frames(frames: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]
     for name, time_columns in {
         "predictions": ["target_hour", "predicted_at"],
         "risks": ["target_hour", "predicted_at"],
-        "actuals": ["order_hour"],
         "status": ["latest_target_hour", "latest_prediction_at"],
     }.items():
         frame = frames.get(name, pd.DataFrame())
@@ -230,8 +186,6 @@ def normalize_frames(frames: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]
     numeric_columns = {
         "predictions": ["predicted_quantity"],
         "risks": ["predicted_usage", "current_stock", "projected_stock"],
-        "actuals": ["quantity", "revenue", "order_count", "pizza_count"],
-        "actual_categories": ["quantity", "revenue", "order_count"],
     }
     for name, columns in numeric_columns.items():
         frame = frames.get(name, pd.DataFrame())
@@ -396,91 +350,9 @@ def render_ingredient_section(risks: pd.DataFrame) -> None:
             st.altair_chart(chart, use_container_width=True)
 
 
-def render_actual_section(actuals: pd.DataFrame, actual_categories: pd.DataFrame) -> None:
-    st.subheader("Doanh số thực tế trong ngày")
-    if actuals.empty:
-        st.info("No online demand aggregates for the selected day yet.")
-        return
-
-    total_quantity = actuals["quantity"].sum()
-    total_orders = actuals["order_count"].sum()
-    total_revenue = actuals["revenue"].sum()
-    active_pizzas = actuals["pizza_count"].max()
-    demand_day = pd.Timestamp(actuals["order_hour"].min()).strftime("%Y-%m-%d")
-
-    a, b, c, d, e = st.columns(5)
-    a.metric("Ngày", demand_day)
-    b.metric("Đã bán", f"{total_quantity:,.0f}")
-    c.metric("Đơn hàng", f"{total_orders:,.0f}")
-    d.metric("Món có bán", f"{active_pizzas:,.0f}")
-    e.metric("Doanh thu", f"${total_revenue:,.0f}")
-
-    left, right = st.columns([1.4, 0.9])
-    with left:
-        if alt is None:
-            st.line_chart(actuals.set_index("order_hour")["quantity"])
-        else:
-            hourly_chart = (
-                alt.Chart(actuals)
-                .mark_area(line=True, point=True, opacity=0.25, color="#2563eb")
-                .encode(
-                    x=alt.X("order_hour:T", title="Hour"),
-                    y=alt.Y("quantity:Q", title="Pizza đã bán"),
-                    tooltip=[
-                        alt.Tooltip("order_hour:T", title="Hour", format="%Y-%m-%d %H:%M"),
-                        alt.Tooltip("quantity:Q", title="Units", format=",.0f"),
-                        alt.Tooltip("order_count:Q", title="Orders", format=",.0f"),
-                        alt.Tooltip("pizza_count:Q", title="Active pizzas", format=",.0f"),
-                    ],
-                )
-                .properties(height=320)
-            )
-            st.altair_chart(hourly_chart, use_container_width=True)
-
-    with right:
-        if actual_categories.empty:
-            st.info("No category aggregates yet.")
-        elif alt is None:
-            st.bar_chart(actual_categories.set_index("pizza_category")["quantity"])
-        else:
-            category_chart = (
-                alt.Chart(actual_categories)
-                .mark_bar(cornerRadiusEnd=4)
-                .encode(
-                    x=alt.X("quantity:Q", title="Đã bán"),
-                    y=alt.Y("pizza_category:N", sort="-x", title=None),
-                    color=alt.Color("pizza_category:N", legend=None, scale=alt.Scale(scheme="set2")),
-                    tooltip=[
-                        alt.Tooltip("pizza_category:N", title="Category"),
-                        alt.Tooltip("quantity:Q", title="Units", format=",.0f"),
-                        alt.Tooltip("revenue:Q", title="Revenue", format="$,.0f"),
-                    ],
-                )
-                .properties(height=320)
-            )
-            st.altair_chart(category_chart, use_container_width=True)
-
-    st.dataframe(
-        actuals.rename(
-            columns={
-                "order_hour": "Hour",
-                "quantity": "Đã bán",
-                "revenue": "Doanh thu",
-                "order_count": "Đơn hàng",
-                "pizza_count": "Món có bán",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-        height=260,
-    )
-
-
 frames = normalize_frames(load_frames())
 predictions = frames["predictions"]
 risks = frames["risks"]
-actuals = frames["actuals"]
-actual_categories = frames["actual_categories"]
 status = frames["status"]
 
 latest_target = scalar(status, "latest_target_hour")
@@ -509,4 +381,3 @@ right.metric("Nguyên liệu cần chú ý", f"{len(risks):,.0f}")
 
 render_prediction_section(predictions)
 render_ingredient_section(risks)
-render_actual_section(actuals, actual_categories)

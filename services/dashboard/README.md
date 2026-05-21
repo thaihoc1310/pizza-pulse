@@ -6,7 +6,6 @@ It reads PostgreSQL tables:
 
 - `demand_predictions`
 - `ingredient_risk_predictions`
-- `online_hourly_demand`
 
 Run locally after port-forwarding PostgreSQL:
 
@@ -26,4 +25,3 @@ Build the image:
 docker build -t thaihoc285/pp-dashboard:0.0.1 services/dashboard
 docker push thaihoc285/pp-dashboard:0.0.1
 ```
-

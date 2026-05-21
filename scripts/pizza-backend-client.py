@@ -17,7 +17,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_API_URL = os.getenv("PIZZA_BACKEND_API_URL", "http://localhost:8083")
 ORDER_TIMEZONE = timezone(timedelta(hours=7))
-SIMULATED_MINUTE_SECONDS = float(os.getenv("ORDER_REPLAY_MINUTE_SECONDS", "1.0"))
+SIMULATED_MINUTE_SECONDS = float(os.getenv("ORDER_REPLAY_MINUTE_SECONDS", "0.5"))
 GENERATOR_WEEKDAY_PIZZAS = int(os.getenv("GENERATOR_WEEKDAY_PIZZAS", "500"))
 GENERATOR_WEEKEND_PIZZAS = int(os.getenv("GENERATOR_WEEKEND_PIZZAS", "650"))
 GENERATOR_ANNUAL_GROWTH = float(os.getenv("GENERATOR_ANNUAL_GROWTH", "0.035"))

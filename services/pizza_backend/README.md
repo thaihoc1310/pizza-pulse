@@ -118,7 +118,7 @@ scripts/pizza-backend-client.py publish-order
 scripts/pizza-backend-client.py publish-order --date 2023-01-05 --time-range 12:00-13:00
 ```
 
-It prompts only for a date and time range when they are not passed as flags. The script reads pizzas from `GET /pizzas`, uses the same weekday/month/holiday/hour and pizza preference rules as `gen-data/generate_pizza_sales.py`, decides the order count automatically, and replays the selected order-time window at `1` simulated minute per `1` real second.
+It prompts only for a date and time range when they are not passed as flags. The script reads pizzas from `GET /pizzas`, uses the same weekday/month/holiday/hour and pizza preference rules as `gen-data/generate_pizza_sales.py`, decides the order count automatically, and replays the selected order-time window at `1` simulated minute per `0.5` real seconds by default.
 
 ## Image
 
