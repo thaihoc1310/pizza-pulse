@@ -20,7 +20,7 @@ That guide covers the required Helm repositories, namespace creation, PostgreSQL
 - `services/pizza_backend/`: FastAPI backend for pizza catalog and online order ingestion
 - `services/dashboard/`: Streamlit realtime dashboard
 - `sql/`: Database schema
-- `dataset/`: Local sample data
+- `dataset/`: Local sample data with historical order timestamps from `2015-01-01` through `2022-12-31`
 - `scripts/`: Local helper scripts
 
 ## Batch MLOps Pipeline
@@ -33,6 +33,8 @@ The `pizza_batch_mlops` DAG runs four training stages:
 4. `compare_and_register_model`: runs as a lightweight Kubernetes pod, selects the best candidate by validation RMSE, registers it in MLflow Model Registry, and updates the `champion` alias when it beats the current champion.
 
 Batch training does not write prediction tables to PostgreSQL. Validation predictions are logged as MLflow artifacts for metrics/debugging; online prediction and dashboard serving can consume `models:/pizza_hourly_demand@champion` later.
+
+Use the `pizza_train_compare_only` DAG when silver/gold lakehouse tables are already fresh and you only want to retrain candidates and compare/register the champion.
 
 Build and push the shared batch image after editing any batch job:
 
@@ -51,7 +53,7 @@ If you use a different registry or tag, update the image in `airflow/dags/pizza_
 - `POST /orders` accepts an order with one or more line items.
 - The service publishes normalized JSON to Kafka topic `pp.order.events`.
 - The service writes to PostgreSQL `orders`, `order_items`, and ingredient stock by default.
-- `scripts/pizza-backend-client.py` can list pizzas, publish a JSON order, or generate demo orders interactively through the backend API.
+- `scripts/pizza-backend-client.py` can list pizzas, publish a JSON order, or replay rule-based demo orders through the backend API.
 
 Build the image:
 

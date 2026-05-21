@@ -943,7 +943,10 @@ def predict_features(features: DataFrame, model_cache: ChampionModelCache) -> li
         pdf[column] = pdf[column].fillna("unknown").astype(str)
 
     cached = model_cache.get()
-    predictions = integer_prediction_quantities(cached.model.predict(pdf[FEATURE_COLUMNS]))
+    raw_predictions = np.maximum(cached.model.predict(pdf[FEATURE_COLUMNS]), 0.0)
+    if "is_open_hour" in pdf.columns:
+        raw_predictions = np.where(pdf["is_open_hour"].astype("int32") == 1, raw_predictions, 0.0)
+    predictions = integer_prediction_quantities(raw_predictions)
     predicted_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     records = []

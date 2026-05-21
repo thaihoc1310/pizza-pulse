@@ -37,8 +37,20 @@ MODEL_NAME = os.getenv("MODEL_NAME", "pizza_hourly_demand")
 MODEL_FLAVOR = os.getenv("MODEL_FLAVOR", "lightgbm").lower()
 
 TRAIN_SPLIT_FRACTION = float(os.getenv("TRAIN_SPLIT_FRACTION", "0.8"))
-MAX_TRAINING_ROWS = int(os.getenv("MAX_TRAINING_ROWS", "500000"))
+MAX_TRAINING_ROWS = int(os.getenv("MAX_TRAINING_ROWS", "1000000"))
 MIN_HISTORY_HOURS = int(os.getenv("MIN_HISTORY_HOURS", "168"))
+TRAIN_OPEN_HOURS_ONLY = os.getenv("TRAIN_OPEN_HOURS_ONLY", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+}
+POSITIVE_TARGET_WEIGHT = float(os.getenv("POSITIVE_TARGET_WEIGHT", "4.0"))
+OPEN_HOUR_SAMPLE_WEIGHT = float(os.getenv("OPEN_HOUR_SAMPLE_WEIGHT", "1.25"))
+HOLIDAY_SAMPLE_WEIGHT = float(os.getenv("HOLIDAY_SAMPLE_WEIGHT", "1.5"))
+PEAK_HOUR_SAMPLE_WEIGHT = float(os.getenv("PEAK_HOUR_SAMPLE_WEIGHT", "1.25"))
+SAMPLE_WEIGHT_COLUMN = "_sample_weight"
 
 
 def require_runtime_config() -> None:
@@ -82,7 +94,7 @@ def build_regressor():
         from lightgbm import LGBMRegressor
 
         return LGBMRegressor(
-            objective="regression",
+            objective=os.getenv("LGBM_OBJECTIVE", "poisson"),
             n_estimators=int(os.getenv("LGBM_N_ESTIMATORS", "400")),
             learning_rate=float(os.getenv("LGBM_LEARNING_RATE", "0.05")),
             num_leaves=int(os.getenv("LGBM_NUM_LEAVES", "31")),
@@ -137,6 +149,29 @@ def regression_metrics(y_true, y_pred) -> dict:
     }
 
 
+def named_regression_metrics(prefix: str, y_true, y_pred) -> dict:
+    metrics = regression_metrics(y_true, y_pred)
+    return {
+        metric_name.replace("validation_", f"{prefix}_", 1): value
+        for metric_name, value in metrics.items()
+    }
+
+
+def weighted_training_frame(df: pd.DataFrame) -> pd.DataFrame:
+    weights = pd.Series(1.0, index=df.index, dtype="float64")
+    weights *= np.where(df[TARGET_COLUMN] > 0, POSITIVE_TARGET_WEIGHT, 1.0)
+
+    if "is_open_hour" in df:
+        weights *= np.where(df["is_open_hour"].astype(int) == 1, OPEN_HOUR_SAMPLE_WEIGHT, 1.0)
+    if "is_holiday" in df:
+        weights *= np.where(df["is_holiday"].astype(int) == 1, HOLIDAY_SAMPLE_WEIGHT, 1.0)
+    if "is_peak_hour" in df:
+        weights *= np.where(df["is_peak_hour"].astype(int) == 1, PEAK_HOUR_SAMPLE_WEIGHT, 1.0)
+
+    df[SAMPLE_WEIGHT_COLUMN] = weights.astype("float64")
+    return df
+
+
 def prepare_training_frame() -> pd.DataFrame:
     require_runtime_config()
     dataset = ds.dataset(
@@ -164,6 +199,10 @@ def prepare_training_frame() -> pd.DataFrame:
         df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0.0).astype("float64")
     df[TARGET_COLUMN] = pd.to_numeric(df[TARGET_COLUMN], errors="coerce").fillna(0.0)
 
+    if TRAIN_OPEN_HOURS_ONLY and "is_open_hour" in df.columns:
+        df = df[df["is_open_hour"] == 1].copy()
+
+    df = weighted_training_frame(df)
     df = df.sort_values(["order_hour", "pizza_id"]).reset_index(drop=True)
     if MAX_TRAINING_ROWS > 0 and len(df) > MAX_TRAINING_ROWS:
         df = df.tail(MAX_TRAINING_ROWS).reset_index(drop=True)
@@ -220,11 +259,22 @@ def main() -> None:
     y_train = train_df[TARGET_COLUMN]
     x_test = test_df[FEATURE_COLUMNS]
     y_test = test_df[TARGET_COLUMN]
+    sample_weight = train_df[SAMPLE_WEIGHT_COLUMN].to_numpy(dtype=float)
 
     model = build_pipeline()
-    model.fit(x_train, y_train)
+    model.fit(x_train, y_train, model__sample_weight=sample_weight)
     prediction = model.predict(x_test)
     metrics = regression_metrics(y_test, prediction)
+    positive_mask = y_test > 0
+    if positive_mask.any():
+        metrics.update(named_regression_metrics("validation_positive", y_test[positive_mask], prediction[positive_mask]))
+    if "is_open_hour" in test_df.columns:
+        open_mask = test_df["is_open_hour"].astype(int) == 1
+        if open_mask.any():
+            metrics.update(named_regression_metrics("validation_open_hour", y_test[open_mask], prediction[open_mask]))
+    metrics["validation_actual_mean"] = float(np.mean(y_test))
+    metrics["validation_prediction_mean"] = float(np.mean(np.maximum(prediction, 0.0)))
+    metrics["validation_positive_row_fraction"] = float(np.mean(y_test > 0))
 
     with mlflow.start_run(run_name=f"{MODEL_FLAVOR}-{RUN_TAG}") as run:
         mlflow.set_tags(
@@ -245,6 +295,11 @@ def main() -> None:
                 "train_split_fraction": TRAIN_SPLIT_FRACTION,
                 "min_history_hours": MIN_HISTORY_HOURS,
                 "max_training_rows": MAX_TRAINING_ROWS,
+                "train_open_hours_only": str(TRAIN_OPEN_HOURS_ONLY).lower(),
+                "positive_target_weight": POSITIVE_TARGET_WEIGHT,
+                "open_hour_sample_weight": OPEN_HOUR_SAMPLE_WEIGHT,
+                "holiday_sample_weight": HOLIDAY_SAMPLE_WEIGHT,
+                "peak_hour_sample_weight": PEAK_HOUR_SAMPLE_WEIGHT,
                 "regressor": model.named_steps["model"].__class__.__name__,
                 "feature_count": len(FEATURE_COLUMNS),
                 "categorical_features": ",".join(CATEGORICAL_FEATURES),
