@@ -54,8 +54,8 @@ def load_frames() -> dict[str, pd.DataFrame]:
                 model_version,
                 predicted_at
             FROM demand_predictions
-            WHERE target_hour >= now() - interval '2 days'
-            ORDER BY target_hour DESC, predicted_quantity DESC
+            WHERE predicted_at >= now() - interval '2 days'
+            ORDER BY predicted_at DESC, target_hour DESC, predicted_quantity DESC
             LIMIT 300
             """
         ),
@@ -114,6 +114,19 @@ def safe_query(sql: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def metric_text(value) -> str:
+    if value is None:
+        return "-"
+    try:
+        if pd.isna(value):
+            return "-"
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(value)
+
+
 frames = load_frames()
 predictions = frames["predictions"]
 actuals = frames["actuals"]
@@ -126,8 +139,8 @@ left, middle, right = st.columns(3)
 if not status.empty:
     row = status.iloc[0]
     left.metric("Prediction rows", int(row.get("prediction_rows") or 0))
-    middle.metric("Model version", row.get("latest_model_version") or "-")
-    right.metric("Latest prediction", row.get("latest_prediction_at") or "-")
+    middle.metric("Model version", metric_text(row.get("latest_model_version")))
+    right.metric("Latest prediction", metric_text(row.get("latest_prediction_at")))
 else:
     left.metric("Prediction rows", 0)
     middle.metric("Model version", "-")

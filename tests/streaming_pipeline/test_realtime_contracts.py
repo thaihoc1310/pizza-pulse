@@ -2,12 +2,16 @@ import unittest
 from datetime import datetime
 
 from jobs.streaming_pipeline.realtime_contracts import (
+    DOUBLE_FEATURES,
     FEATURE_COLUMNS,
     ChampionModelCache,
+    INTEGER_FEATURES,
     ingredient_alert_event,
+    integer_quantity,
     json_dumps,
     prediction_event,
 )
+from jobs.batch_pipeline.feature_contract import FEATURE_COLUMNS as BATCH_FEATURE_COLUMNS
 
 
 class FakeVersion:
@@ -40,13 +44,87 @@ class Clock:
 class RealtimeContractsTest(unittest.TestCase):
     def test_feature_columns_match_training_contract(self):
         self.assertEqual(
+            INTEGER_FEATURES,
+            [
+                "hour",
+                "day_of_week",
+                "day_of_month",
+                "month",
+                "year",
+                "is_weekend",
+                "is_open_hour",
+                "is_lunch_peak",
+                "is_dinner_peak",
+                "is_peak_hour",
+                "is_holiday",
+                "is_major_holiday",
+            ],
+        )
+        self.assertEqual(
+            DOUBLE_FEATURES,
+            [
+                "years_since_2015",
+                "annual_growth_factor",
+                "month_factor",
+                "weekday_factor",
+                "holiday_mean_units",
+                "hour_weight",
+                "daily_demand_prior",
+                "hour_demand_prior",
+                "unit_price",
+                "pizza_base_weight",
+                "pizza_context_weight",
+                "pizza_context_share",
+                "pizza_hour_demand_prior",
+                "hour_sin",
+                "hour_cos",
+                "dow_sin",
+                "dow_cos",
+                "month_sin",
+                "month_cos",
+                "lag_1h",
+                "lag_24h",
+                "lag_168h",
+                "rolling_mean_24h",
+                "rolling_sum_24h",
+                "rolling_mean_168h",
+                "rolling_sum_168h",
+            ],
+        )
+        self.assertEqual(
             FEATURE_COLUMNS,
             [
                 "hour",
                 "day_of_week",
                 "day_of_month",
                 "month",
+                "year",
                 "is_weekend",
+                "is_open_hour",
+                "is_lunch_peak",
+                "is_dinner_peak",
+                "is_peak_hour",
+                "is_holiday",
+                "is_major_holiday",
+                "years_since_2015",
+                "annual_growth_factor",
+                "month_factor",
+                "weekday_factor",
+                "holiday_mean_units",
+                "hour_weight",
+                "daily_demand_prior",
+                "hour_demand_prior",
+                "unit_price",
+                "pizza_base_weight",
+                "pizza_context_weight",
+                "pizza_context_share",
+                "pizza_hour_demand_prior",
+                "hour_sin",
+                "hour_cos",
+                "dow_sin",
+                "dow_cos",
+                "month_sin",
+                "month_cos",
                 "lag_1h",
                 "lag_24h",
                 "lag_168h",
@@ -57,8 +135,20 @@ class RealtimeContractsTest(unittest.TestCase):
                 "pizza_id",
                 "pizza_size",
                 "pizza_category",
+                "pizza_family",
+                "holiday_name",
+                "daypart",
             ],
         )
+        self.assertEqual(FEATURE_COLUMNS, BATCH_FEATURE_COLUMNS)
+
+    def test_integer_quantity_rounds_model_output_for_serving(self):
+        self.assertEqual(integer_quantity(-1.2), 0)
+        self.assertEqual(integer_quantity(0.15), 0)
+        self.assertEqual(integer_quantity(0.5), 1)
+        self.assertEqual(integer_quantity(1.49), 1)
+        self.assertEqual(integer_quantity(1.5), 2)
+        self.assertEqual(integer_quantity(None), 0)
 
     def test_model_cache_reloads_when_alias_version_changes(self):
         clock = Clock()
@@ -103,6 +193,7 @@ class RealtimeContractsTest(unittest.TestCase):
 
         self.assertEqual(event["event_type"], "demand_prediction_created")
         self.assertEqual(event["target_hour"], "2016-01-01T13:00:00")
+        self.assertEqual(event["predicted_quantity"], 13)
         self.assertIn("predicted_quantity", json_dumps(event))
 
     def test_ingredient_alert_event_serializes_for_kafka(self):
@@ -129,4 +220,3 @@ class RealtimeContractsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

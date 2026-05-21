@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -12,25 +12,29 @@ sys.path.append(str(Path(__file__).resolve().parent))
 import numpy as np
 import pandas as pd
 import psycopg
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql.functions import (
-    avg,
     coalesce,
     col,
-    countDistinct,
+    cos,
     date_trunc,
     dayofmonth,
     dayofweek,
     explode,
     expr,
     from_json,
+    greatest,
     hour,
     lit,
     month,
+    pow as spark_pow,
+    regexp_replace,
+    sin,
     sum as spark_sum,
-    to_json,
     to_timestamp,
+    to_date,
     when,
+    year as spark_year,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -45,10 +49,12 @@ from pyspark.sql.types import (
 
 from realtime_contracts import (
     CATEGORICAL_FEATURES,
+    DOUBLE_FEATURES,
     FEATURE_COLUMNS,
-    NUMERIC_FEATURES,
+    INTEGER_FEATURES,
     ChampionModelCache,
     ingredient_alert_event,
+    integer_quantity,
     json_dumps,
     prediction_event,
 )
@@ -82,6 +88,117 @@ MODEL_NAME = os.getenv("MODEL_NAME", "pizza_hourly_demand")
 MODEL_ALIAS = os.getenv("MODEL_ALIAS", "champion")
 MODEL_REFRESH_SECONDS = int(os.getenv("MODEL_REFRESH_SECONDS", "60"))
 TRIGGER_PROCESSING_TIME = os.getenv("STREAMING_TRIGGER_PROCESSING_TIME", "15 seconds")
+
+GENERATOR_WEEKDAY_PIZZAS = float(os.getenv("GENERATOR_WEEKDAY_PIZZAS", "500"))
+GENERATOR_WEEKEND_PIZZAS = float(os.getenv("GENERATOR_WEEKEND_PIZZAS", "650"))
+GENERATOR_ANNUAL_GROWTH = float(os.getenv("GENERATOR_ANNUAL_GROWTH", "0.035"))
+GENERATOR_OPEN_HOUR = int(os.getenv("GENERATOR_OPEN_HOUR", "10"))
+GENERATOR_CLOSE_HOUR = int(os.getenv("GENERATOR_CLOSE_HOUR", "23"))
+GENERATOR_START_YEAR = int(os.getenv("GENERATOR_START_YEAR", "2015"))
+
+MONTH_FACTORS = {
+    1: 0.94,
+    2: 1.02,
+    3: 1.00,
+    4: 1.03,
+    5: 1.08,
+    6: 1.05,
+    7: 1.07,
+    8: 1.02,
+    9: 1.04,
+    10: 1.08,
+    11: 1.12,
+    12: 1.18,
+}
+
+WEEKDAY_FACTORS = {
+    1: 0.96,
+    2: 0.90,
+    3: 0.93,
+    4: 0.97,
+    5: 1.02,
+    6: 1.10,
+    7: 1.06,
+}
+
+HOUR_WEIGHTS = {
+    8: 0.05,
+    9: 0.10,
+    10: 0.50,
+    11: 1.70,
+    12: 3.30,
+    13: 2.30,
+    14: 0.95,
+    15: 0.70,
+    16: 1.00,
+    17: 2.40,
+    18: 3.90,
+    19: 3.70,
+    20: 2.40,
+    21: 1.35,
+    22: 0.75,
+    23: 0.25,
+}
+
+HOLIDAY_MEAN_UNITS = {
+    "new_year_day": 1500.0,
+    "valentines_day": 1300.0,
+    "st_patricks_day": 1100.0,
+    "cinco_de_mayo": 1200.0,
+    "independence_day": 1700.0,
+    "halloween": 1400.0,
+    "christmas_eve": 1500.0,
+    "christmas_day": 1100.0,
+    "new_year_eve": 1900.0,
+    "super_bowl": 1800.0,
+    "memorial_day_weekend": 1250.0,
+    "labor_day_weekend": 1250.0,
+    "mothers_day": 1150.0,
+    "fathers_day": 1200.0,
+    "thanksgiving_eve": 1500.0,
+    "thanksgiving_day": 1100.0,
+    "black_friday": 1300.0,
+    "holiday_week": 1200.0,
+}
+
+CATEGORY_WEIGHTS = {
+    "Classic": 1.15,
+    "Chicken": 1.06,
+    "Supreme": 0.98,
+    "Veggie": 0.90,
+}
+
+SIZE_WEIGHTS = {
+    "S": 0.92,
+    "M": 1.30,
+    "L": 1.12,
+    "XL": 0.18,
+    "XXL": 0.06,
+}
+
+FAMILY_WEIGHTS = {
+    "classic_dlx": 1.45,
+    "pepperoni": 1.38,
+    "bbq_ckn": 1.32,
+    "thai_ckn": 1.28,
+    "hawaiian": 1.25,
+    "cali_ckn": 1.22,
+    "four_cheese": 1.18,
+    "ital_supr": 1.16,
+    "spicy_ital": 1.14,
+    "southw_ckn": 1.12,
+    "five_cheese": 1.10,
+    "mexicana": 1.08,
+    "big_meat": 1.05,
+    "brie_carre": 0.35,
+    "the_greek": 0.65,
+    "green_garden": 0.82,
+}
+
+SUPER_BOWL_FAMILIES = {"pepperoni", "classic_dlx", "bbq_ckn", "big_meat", "pep_msh_pep"}
+VALENTINES_FAMILIES = {"brie_carre", "five_cheese", "four_cheese", "spinach_fet"}
+SUMMER_FAMILIES = {"hawaiian", "bbq_ckn", "cali_ckn"}
+GRILLING_HOLIDAY_FAMILIES = {"bbq_ckn", "cali_ckn", "hawaiian", "pepperoni"}
 
 
 ORDER_ITEM_SCHEMA = StructType(
@@ -136,7 +253,7 @@ CREATE TABLE IF NOT EXISTS demand_predictions (
     pizza_name TEXT,
     pizza_size TEXT,
     pizza_category TEXT,
-    predicted_quantity NUMERIC(12, 4) NOT NULL,
+    predicted_quantity BIGINT NOT NULL,
     model_name TEXT NOT NULL,
     model_alias TEXT NOT NULL,
     model_version TEXT NOT NULL,
@@ -145,6 +262,10 @@ CREATE TABLE IF NOT EXISTS demand_predictions (
     updated_at TIMESTAMP DEFAULT now(),
     PRIMARY KEY (target_hour, pizza_id)
 );
+
+ALTER TABLE demand_predictions
+    ALTER COLUMN predicted_quantity TYPE BIGINT
+    USING ROUND(predicted_quantity::numeric)::BIGINT;
 
 CREATE TABLE IF NOT EXISTS ingredient_risk_predictions (
     target_hour TIMESTAMP NOT NULL,
@@ -162,6 +283,318 @@ CREATE TABLE IF NOT EXISTS ingredient_risk_predictions (
     PRIMARY KEY (target_hour, ingredient_id)
 );
 """
+
+REFRESH_INGREDIENT_RISKS_SQL = """
+WITH ingredient_usage AS (
+    SELECT
+        dp.target_hour,
+        pi.ingredient_id,
+        i.ingredient_name,
+        SUM(dp.predicted_quantity::numeric * pi.unit_amount)::numeric(12, 4) AS predicted_usage,
+        i.current_stock::numeric(12, 4) AS current_stock,
+        MAX(dp.model_name) AS model_name,
+        MAX(dp.model_alias) AS model_alias,
+        MAX(dp.model_version) AS model_version,
+        MAX(dp.predicted_at) AS predicted_at
+    FROM demand_predictions dp
+    JOIN pizza_ingredients pi
+        ON dp.pizza_id = pi.pizza_id
+    JOIN ingredients i
+        ON pi.ingredient_id = i.ingredient_id
+    GROUP BY
+        dp.target_hour,
+        pi.ingredient_id,
+        i.ingredient_name,
+        i.current_stock
+),
+scored AS (
+    SELECT
+        target_hour,
+        ingredient_id,
+        ingredient_name,
+        predicted_usage,
+        current_stock,
+        (current_stock - predicted_usage)::numeric(12, 4) AS projected_stock,
+        CASE
+            WHEN current_stock - predicted_usage < 0 THEN 'critical'
+            WHEN predicted_usage >= current_stock * 0.8 THEN 'warning'
+            ELSE 'ok'
+        END AS severity,
+        model_name,
+        model_alias,
+        model_version,
+        predicted_at
+    FROM ingredient_usage
+)
+INSERT INTO ingredient_risk_predictions (
+    target_hour,
+    ingredient_id,
+    ingredient_name,
+    predicted_usage,
+    current_stock,
+    projected_stock,
+    severity,
+    model_name,
+    model_alias,
+    model_version,
+    predicted_at
+)
+SELECT
+    target_hour,
+    ingredient_id,
+    ingredient_name,
+    predicted_usage,
+    current_stock,
+    projected_stock,
+    severity,
+    model_name,
+    model_alias,
+    model_version,
+    predicted_at
+FROM scored
+ON CONFLICT (target_hour, ingredient_id) DO UPDATE
+SET
+    ingredient_name = EXCLUDED.ingredient_name,
+    predicted_usage = EXCLUDED.predicted_usage,
+    current_stock = EXCLUDED.current_stock,
+    projected_stock = EXCLUDED.projected_stock,
+    severity = EXCLUDED.severity,
+    model_name = EXCLUDED.model_name,
+    model_alias = EXCLUDED.model_alias,
+    model_version = EXCLUDED.model_version,
+    predicted_at = EXCLUDED.predicted_at,
+    updated_at = now();
+"""
+
+
+def map_value(key_col, mapping: dict, default: float):
+    result = lit(float(default))
+    for key, value in reversed(list(mapping.items())):
+        result = when(key_col == lit(key), lit(float(value))).otherwise(result)
+    return result
+
+
+def configured_hour_weight_sum(is_weekend: bool, is_holiday: bool) -> float:
+    total = 0.0
+    for hour_value, weight in HOUR_WEIGHTS.items():
+        if hour_value < GENERATOR_OPEN_HOUR or hour_value > GENERATOR_CLOSE_HOUR:
+            continue
+        adjusted = weight
+        if is_weekend and hour_value in {17, 18, 19, 20, 21}:
+            adjusted *= 1.12
+        if is_holiday and hour_value in {12, 13, 17, 18, 19, 20}:
+            adjusted *= 1.18
+        total += adjusted
+    return total
+
+
+HOUR_WEIGHT_SUMS = {
+    (False, False): configured_hour_weight_sum(False, False),
+    (True, False): configured_hour_weight_sum(True, False),
+    (False, True): configured_hour_weight_sum(False, True),
+    (True, True): configured_hour_weight_sum(True, True),
+}
+
+
+def hour_weight_total_expr():
+    return (
+        when(
+            (col("is_weekend") == 1) & (col("is_holiday") == 1),
+            lit(HOUR_WEIGHT_SUMS[(True, True)]),
+        )
+        .when(col("is_weekend") == 1, lit(HOUR_WEIGHT_SUMS[(True, False)]))
+        .when(col("is_holiday") == 1, lit(HOUR_WEIGHT_SUMS[(False, True)]))
+        .otherwise(lit(HOUR_WEIGHT_SUMS[(False, False)]))
+    )
+
+
+def add_generator_calendar_features(df: DataFrame, timestamp_col: str) -> DataFrame:
+    two_pi = lit(2.0 * math.pi)
+    feature_date = to_date(col(timestamp_col))
+
+    df = (
+        df.withColumn("hour", hour(col(timestamp_col)))
+        .withColumn("day_of_week", dayofweek(col(timestamp_col)))
+        .withColumn("day_of_month", dayofmonth(col(timestamp_col)))
+        .withColumn("month", month(col(timestamp_col)))
+        .withColumn("year", spark_year(col(timestamp_col)))
+        .withColumn("_feature_date", feature_date)
+        .withColumn("is_weekend", when(col("day_of_week").isin(1, 7), lit(1)).otherwise(lit(0)))
+        .withColumn(
+            "is_open_hour",
+            when(
+                (col("hour") >= lit(GENERATOR_OPEN_HOUR))
+                & (col("hour") <= lit(GENERATOR_CLOSE_HOUR))
+                & (map_value(col("hour"), HOUR_WEIGHTS, 0.0) > lit(0.0)),
+                lit(1),
+            ).otherwise(lit(0)),
+        )
+        .withColumn("is_lunch_peak", when(col("hour").between(11, 14), lit(1)).otherwise(lit(0)))
+        .withColumn("is_dinner_peak", when(col("hour").between(17, 20), lit(1)).otherwise(lit(0)))
+        .withColumn("is_peak_hour", when(col("hour").isin(12, 18, 19), lit(1)).otherwise(lit(0)))
+        .withColumn("_feb_first_sunday", expr("next_day(date_sub(make_date(year, 2, 1), 1), 'Sun')"))
+        .withColumn(
+            "_super_bowl",
+            expr("date_add(_feb_first_sunday, CASE WHEN year >= 2022 THEN 7 ELSE 0 END)"),
+        )
+        .withColumn("_memorial_day", expr("next_day(date_sub(last_day(make_date(year, 5, 1)), 7), 'Mon')"))
+        .withColumn("_labor_day", expr("next_day(date_sub(make_date(year, 9, 1), 1), 'Mon')"))
+        .withColumn("_thanksgiving", expr("date_add(next_day(date_sub(make_date(year, 11, 1), 1), 'Thu'), 21)"))
+        .withColumn("_mothers_day", expr("date_add(next_day(date_sub(make_date(year, 5, 1), 1), 'Sun'), 7)"))
+        .withColumn("_fathers_day", expr("date_add(next_day(date_sub(make_date(year, 6, 1), 1), 'Sun'), 14)"))
+    )
+
+    df = df.withColumn(
+        "holiday_name",
+        when((col("month") == 1) & (col("day_of_month") == 1), lit("new_year_day"))
+        .when((col("month") == 2) & (col("day_of_month") == 14), lit("valentines_day"))
+        .when((col("month") == 3) & (col("day_of_month") == 17), lit("st_patricks_day"))
+        .when((col("month") == 5) & (col("day_of_month") == 5), lit("cinco_de_mayo"))
+        .when((col("month") == 7) & (col("day_of_month") == 4), lit("independence_day"))
+        .when((col("month") == 10) & (col("day_of_month") == 31), lit("halloween"))
+        .when((col("month") == 12) & (col("day_of_month") == 24), lit("christmas_eve"))
+        .when((col("month") == 12) & (col("day_of_month") == 25), lit("christmas_day"))
+        .when((col("month") == 12) & (col("day_of_month") == 31), lit("new_year_eve"))
+        .when(col("_feature_date") == col("_super_bowl"), lit("super_bowl"))
+        .when(
+            (col("_feature_date") >= expr("date_sub(_memorial_day, 2)"))
+            & (col("_feature_date") <= col("_memorial_day")),
+            lit("memorial_day_weekend"),
+        )
+        .when(
+            (col("_feature_date") >= expr("date_sub(_labor_day, 2)"))
+            & (col("_feature_date") <= col("_labor_day")),
+            lit("labor_day_weekend"),
+        )
+        .when(col("_feature_date") == col("_mothers_day"), lit("mothers_day"))
+        .when(col("_feature_date") == col("_fathers_day"), lit("fathers_day"))
+        .when(col("_feature_date") == expr("date_sub(_thanksgiving, 1)"), lit("thanksgiving_eve"))
+        .when(col("_feature_date") == col("_thanksgiving"), lit("thanksgiving_day"))
+        .when(col("_feature_date") == expr("date_add(_thanksgiving, 1)"), lit("black_friday"))
+        .when((col("month") == 12) & col("day_of_month").between(26, 30), lit("holiday_week"))
+        .otherwise(lit("none")),
+    )
+
+    df = (
+        df.withColumn("holiday_mean_units", map_value(col("holiday_name"), HOLIDAY_MEAN_UNITS, 0.0))
+        .withColumn("is_holiday", when(col("holiday_name") != lit("none"), lit(1)).otherwise(lit(0)))
+        .withColumn("is_major_holiday", when(col("holiday_mean_units") >= lit(1500.0), lit(1)).otherwise(lit(0)))
+        .withColumn("month_factor", map_value(col("month"), MONTH_FACTORS, 1.0))
+        .withColumn("weekday_factor", map_value(col("day_of_week"), WEEKDAY_FACTORS, 1.0))
+        .withColumn("years_since_2015", (col("year") - lit(GENERATOR_START_YEAR)).cast("double"))
+        .withColumn(
+            "annual_growth_factor",
+            lit(1.0) + lit(GENERATOR_ANNUAL_GROWTH) * col("years_since_2015"),
+        )
+        .withColumn(
+            "_base_daily_units",
+            when(col("is_weekend") == 1, lit(GENERATOR_WEEKEND_PIZZAS)).otherwise(lit(GENERATOR_WEEKDAY_PIZZAS)),
+        )
+        .withColumn(
+            "daily_demand_prior",
+            when(col("is_holiday") == 1, col("holiday_mean_units") * col("annual_growth_factor")).otherwise(
+                col("_base_daily_units")
+                * col("annual_growth_factor")
+                * col("month_factor")
+                * col("weekday_factor")
+            ),
+        )
+        .withColumn("_base_hour_weight", map_value(col("hour"), HOUR_WEIGHTS, 0.0))
+        .withColumn(
+            "hour_weight",
+            when(col("is_open_hour") == 1, col("_base_hour_weight")).otherwise(lit(0.0)),
+        )
+        .withColumn(
+            "hour_weight",
+            col("hour_weight")
+            * when((col("is_weekend") == 1) & col("hour").isin(17, 18, 19, 20, 21), lit(1.12)).otherwise(lit(1.0))
+            * when((col("is_holiday") == 1) & col("hour").isin(12, 13, 17, 18, 19, 20), lit(1.18)).otherwise(lit(1.0)),
+        )
+        .withColumn("_hour_weight_total", hour_weight_total_expr())
+        .withColumn(
+            "hour_demand_prior",
+            when(col("_hour_weight_total") > 0, col("daily_demand_prior") * col("hour_weight") / col("_hour_weight_total")).otherwise(lit(0.0)),
+        )
+        .withColumn(
+            "daypart",
+            when(col("is_open_hour") == 0, lit("closed"))
+            .when(col("hour").between(11, 14), lit("lunch"))
+            .when(col("hour").between(17, 20), lit("dinner"))
+            .when(col("hour").between(21, 23), lit("late"))
+            .when(col("hour").between(15, 16), lit("afternoon"))
+            .otherwise(lit("open")),
+        )
+        .withColumn("hour_sin", sin(two_pi * col("hour") / lit(24.0)))
+        .withColumn("hour_cos", cos(two_pi * col("hour") / lit(24.0)))
+        .withColumn("dow_sin", sin(two_pi * (col("day_of_week") - lit(1)) / lit(7.0)))
+        .withColumn("dow_cos", cos(two_pi * (col("day_of_week") - lit(1)) / lit(7.0)))
+        .withColumn("month_sin", sin(two_pi * (col("month") - lit(1)) / lit(12.0)))
+        .withColumn("month_cos", cos(two_pi * (col("month") - lit(1)) / lit(12.0)))
+    )
+
+    return df.drop(
+        "_feature_date",
+        "_feb_first_sunday",
+        "_super_bowl",
+        "_memorial_day",
+        "_labor_day",
+        "_thanksgiving",
+        "_mothers_day",
+        "_fathers_day",
+        "_base_daily_units",
+        "_base_hour_weight",
+        "_hour_weight_total",
+    )
+
+
+def add_generator_pizza_features(df: DataFrame, timestamp_col: str) -> DataFrame:
+    df = df.withColumn(
+        "pizza_family",
+        coalesce(col("pizza_family"), regexp_replace(col("pizza_id"), "_(?:s|m|l|xl|xxl)$", "")),
+    ).withColumn("unit_price", coalesce(col("unit_price").cast("double"), lit(16.0)))
+
+    price_weight = spark_pow(lit(16.0) / greatest(col("unit_price"), lit(0.01)), lit(0.35))
+    df = df.withColumn(
+        "pizza_base_weight",
+        map_value(col("pizza_category"), CATEGORY_WEIGHTS, 1.0)
+        * map_value(col("pizza_size"), SIZE_WEIGHTS, 1.0)
+        * map_value(col("pizza_family"), FAMILY_WEIGHTS, 1.0)
+        * price_weight,
+    )
+
+    context_multiplier = (
+        when((col("hour").between(11, 14)) & col("pizza_size").isin("S", "M"), lit(1.10)).otherwise(lit(1.0))
+        * when((col("hour").between(17, 20)) & col("pizza_size").isin("M", "L", "XL"), lit(1.12)).otherwise(lit(1.0))
+        * when((col("is_weekend") == 1) & col("pizza_size").isin("L", "XL", "XXL"), lit(1.10)).otherwise(lit(1.0))
+        * when((col("month").isin(6, 7, 8)) & col("pizza_family").isin(*SUMMER_FAMILIES), lit(1.18)).otherwise(lit(1.0))
+        * when((col("month").isin(11, 12)) & col("pizza_category").isin("Classic", "Supreme"), lit(1.08)).otherwise(lit(1.0))
+        * when((col("month") == 1) & col("pizza_category").isin("Veggie", "Chicken"), lit(1.08)).otherwise(lit(1.0))
+        * when((col("holiday_name") == "super_bowl") & col("pizza_family").isin(*SUPER_BOWL_FAMILIES), lit(1.45)).otherwise(lit(1.0))
+        * when((col("holiday_name") == "valentines_day") & col("pizza_family").isin(*VALENTINES_FAMILIES), lit(1.35)).otherwise(lit(1.0))
+        * when((col("holiday_name") == "cinco_de_mayo") & col("pizza_family").isin("mexicana", "southw_ckn"), lit(1.55)).otherwise(lit(1.0))
+        * when(
+            col("holiday_name").isin("independence_day", "memorial_day_weekend", "labor_day_weekend")
+            & col("pizza_family").isin(*GRILLING_HOLIDAY_FAMILIES),
+            lit(1.30),
+        ).otherwise(lit(1.0))
+        * when(
+            col("holiday_name").isin("new_year_eve", "new_year_day", "holiday_week")
+            & col("pizza_category").isin("Classic", "Supreme"),
+            lit(1.16),
+        ).otherwise(lit(1.0))
+    )
+
+    partition_window = Window.partitionBy(timestamp_col)
+    return (
+        df.withColumn("pizza_context_weight", col("pizza_base_weight") * context_multiplier)
+        .withColumn("_pizza_context_weight_sum", spark_sum("pizza_context_weight").over(partition_window))
+        .withColumn(
+            "pizza_context_share",
+            when(col("_pizza_context_weight_sum") > 0, col("pizza_context_weight") / col("_pizza_context_weight_sum")).otherwise(lit(0.0)),
+        )
+        .withColumn("pizza_hour_demand_prior", col("hour_demand_prior") * col("pizza_context_share"))
+        .drop("_pizza_context_weight_sum")
+    )
 
 
 def require_runtime_config() -> None:
@@ -228,6 +661,7 @@ def ensure_realtime_tables() -> None:
     with postgres_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(REALTIME_TABLE_DDL)
+            cur.execute(REFRESH_INGREDIENT_RISKS_SQL)
 
 
 def parse_order_events(raw: DataFrame) -> DataFrame:
@@ -373,6 +807,7 @@ def read_historical_hourly(spark: SparkSession, start_hour: datetime, end_hour: 
 
 
 def read_online_hourly(spark: SparkSession, start_hour: datetime, end_hour: datetime) -> DataFrame:
+    end_exclusive = end_hour + timedelta(hours=1)
     return read_jdbc_query(
         spark,
         f"""
@@ -384,9 +819,25 @@ def read_online_hourly(spark: SparkSession, start_hour: datetime, end_hour: date
         JOIN orders o
             ON oi.order_id = o.order_id
         WHERE o.order_ts >= TIMESTAMP '{start_hour:%Y-%m-%d %H:%M:%S}'
-          AND o.order_ts <= TIMESTAMP '{end_hour:%Y-%m-%d %H:%M:%S}'
+          AND o.order_ts < TIMESTAMP '{end_exclusive:%Y-%m-%d %H:%M:%S}'
         GROUP BY date_trunc('hour', o.order_ts), oi.pizza_id
         """
+    )
+
+
+def merge_hourly_history(historical: DataFrame, online: DataFrame) -> DataFrame:
+    return (
+        historical.alias("h")
+        .join(
+            online.alias("o"),
+            (col("h.order_hour") == col("o.order_hour")) & (col("h.pizza_id") == col("o.pizza_id")),
+            "full_outer",
+        )
+        .select(
+            coalesce(col("o.order_hour"), col("h.order_hour")).alias("order_hour"),
+            coalesce(col("o.pizza_id"), col("h.pizza_id")).alias("pizza_id"),
+            coalesce(col("o.quantity"), col("h.quantity"), lit(0.0)).alias("quantity"),
+        )
     )
 
 
@@ -406,11 +857,9 @@ def build_feature_frame(spark: SparkSession, target_hours: DataFrame, pizzas: Da
     history_start = min_target - timedelta(hours=168)
     history_end = max_target - timedelta(hours=1)
 
-    history = (
-        read_historical_hourly(spark, history_start, history_end)
-        .unionByName(read_online_hourly(spark, history_start, history_end))
-        .groupBy("order_hour", "pizza_id")
-        .agg(spark_sum("quantity").alias("quantity"))
+    history = merge_hourly_history(
+        read_historical_hourly(spark, history_start, history_end),
+        read_online_hourly(spark, history_start, history_end),
     )
 
     targets = (
@@ -420,14 +869,12 @@ def build_feature_frame(spark: SparkSession, target_hours: DataFrame, pizzas: Da
                 "pizza_name",
                 "pizza_size",
                 "pizza_category",
+                "pizza_family",
+                "unit_price",
             )
         )
-        .withColumn("hour", hour(col("target_hour")))
-        .withColumn("day_of_week", dayofweek(col("target_hour")))
-        .withColumn("day_of_month", dayofmonth(col("target_hour")))
-        .withColumn("month", month(col("target_hour")))
-        .withColumn("is_weekend", when(col("day_of_week").isin(1, 7), lit(1)).otherwise(lit(0)))
     )
+    targets = add_generator_pizza_features(add_generator_calendar_features(targets, "target_hour"), "target_hour")
 
     features = add_lag_feature(targets, history, 1, "lag_1h")
     features = add_lag_feature(features, history, 24, "lag_24h")
@@ -435,7 +882,9 @@ def build_feature_frame(spark: SparkSession, target_hours: DataFrame, pizzas: Da
     features = add_rolling_features(features, history, 24)
     features = add_rolling_features(features, history, 168)
 
-    for column in NUMERIC_FEATURES:
+    for column in INTEGER_FEATURES:
+        features = features.withColumn(column, coalesce(col(column).cast("int"), lit(0)))
+    for column in DOUBLE_FEATURES:
         features = features.withColumn(column, coalesce(col(column).cast("double"), lit(0.0)))
     for column in CATEGORICAL_FEATURES:
         features = features.withColumn(column, coalesce(col(column).cast("string"), lit("unknown")))
@@ -454,32 +903,7 @@ def add_lag_feature(features: DataFrame, history: DataFrame, lag_hours: int, out
 
 
 def add_rolling_features(features: DataFrame, history: DataFrame, hours_count: int) -> DataFrame:
-    key_columns = [
-        "target_hour",
-        "pizza_id",
-        "pizza_name",
-        "pizza_size",
-        "pizza_category",
-        "hour",
-        "day_of_week",
-        "day_of_month",
-        "month",
-        "is_weekend",
-        "lag_1h",
-        "lag_24h",
-        "lag_168h",
-    ]
-    existing_rolling = [
-        column
-        for column in [
-            "rolling_sum_24h",
-            "rolling_mean_24h",
-            "rolling_sum_168h",
-            "rolling_mean_168h",
-        ]
-        if column in features.columns
-    ]
-    key_columns.extend(existing_rolling)
+    key_columns = features.columns
 
     rolling = (
         features.alias("f")
@@ -499,6 +923,10 @@ def add_rolling_features(features: DataFrame, history: DataFrame, hours_count: i
     )
 
 
+def integer_prediction_quantities(predictions: Any) -> np.ndarray:
+    return np.asarray([integer_quantity(prediction) for prediction in predictions], dtype=np.int64)
+
+
 def predict_features(features: DataFrame, model_cache: ChampionModelCache) -> list[dict[str, Any]]:
     if features.limit(1).count() == 0:
         return []
@@ -507,13 +935,15 @@ def predict_features(features: DataFrame, model_cache: ChampionModelCache) -> li
     if pdf.empty:
         return []
 
-    for column in NUMERIC_FEATURES:
-        pdf[column] = pd.to_numeric(pdf[column], errors="coerce").fillna(0.0)
+    for column in INTEGER_FEATURES:
+        pdf[column] = pd.to_numeric(pdf[column], errors="coerce").fillna(0).astype("int32")
+    for column in DOUBLE_FEATURES:
+        pdf[column] = pd.to_numeric(pdf[column], errors="coerce").fillna(0.0).astype("float64")
     for column in CATEGORICAL_FEATURES:
         pdf[column] = pdf[column].fillna("unknown").astype(str)
 
     cached = model_cache.get()
-    predictions = np.maximum(cached.model.predict(pdf[FEATURE_COLUMNS]), 0.0)
+    predictions = integer_prediction_quantities(cached.model.predict(pdf[FEATURE_COLUMNS]))
     predicted_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     records = []
@@ -530,7 +960,7 @@ def predict_features(features: DataFrame, model_cache: ChampionModelCache) -> li
                 "pizza_name": row.get("pizza_name"),
                 "pizza_size": row.get("pizza_size"),
                 "pizza_category": row.get("pizza_category"),
-                "predicted_quantity": float(predicted_quantity),
+                "predicted_quantity": int(predicted_quantity),
                 "model_name": MODEL_NAME,
                 "model_alias": MODEL_ALIAS,
                 "model_version": cached.version,
@@ -623,7 +1053,7 @@ def build_ingredient_risks(spark: SparkSession, predictions: DataFrame) -> DataF
 
     usage = (
         predictions.join(pizza_ingredients, on="pizza_id", how="inner")
-        .withColumn("ingredient_usage", col("predicted_quantity") * col("unit_amount"))
+        .withColumn("ingredient_usage", col("predicted_quantity").cast("long") * col("unit_amount"))
         .groupBy(
             "target_hour",
             "ingredient_id",
@@ -771,6 +1201,8 @@ def process_batch(batch: DataFrame, batch_id: int, model_cache: ChampionModelCac
         "pizza_name",
         "pizza_size",
         "pizza_category",
+        regexp_replace(col("pizza_id"), "_(?:s|m|l|xl|xxl)$", "").alias("pizza_family"),
+        col("unit_price").cast("double").alias("unit_price"),
     )
     features = build_feature_frame(spark, target_hours, pizzas)
     prediction_records = predict_features(features, model_cache)

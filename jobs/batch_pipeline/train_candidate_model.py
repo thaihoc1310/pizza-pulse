@@ -15,6 +15,15 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+from feature_contract import (
+    CATEGORICAL_FEATURES,
+    DOUBLE_FEATURES,
+    FEATURE_COLUMNS,
+    INTEGER_FEATURES,
+    NUMERIC_FEATURES,
+    TARGET_COLUMN,
+)
+
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://pp-minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY") or os.getenv("AWS_ACCESS_KEY_ID")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -30,24 +39,6 @@ MODEL_FLAVOR = os.getenv("MODEL_FLAVOR", "lightgbm").lower()
 TRAIN_SPLIT_FRACTION = float(os.getenv("TRAIN_SPLIT_FRACTION", "0.8"))
 MAX_TRAINING_ROWS = int(os.getenv("MAX_TRAINING_ROWS", "500000"))
 MIN_HISTORY_HOURS = int(os.getenv("MIN_HISTORY_HOURS", "168"))
-
-CATEGORICAL_FEATURES = ["pizza_id", "pizza_size", "pizza_category"]
-NUMERIC_FEATURES = [
-    "hour",
-    "day_of_week",
-    "day_of_month",
-    "month",
-    "is_weekend",
-    "lag_1h",
-    "lag_24h",
-    "lag_168h",
-    "rolling_mean_24h",
-    "rolling_sum_24h",
-    "rolling_mean_168h",
-    "rolling_sum_168h",
-]
-FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-TARGET_COLUMN = "target_quantity"
 
 
 def require_runtime_config() -> None:
@@ -167,8 +158,10 @@ def prepare_training_frame() -> pd.DataFrame:
 
     for column in CATEGORICAL_FEATURES:
         df[column] = df[column].fillna("unknown").astype(str)
-    for column in NUMERIC_FEATURES:
-        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0.0)
+    for column in INTEGER_FEATURES:
+        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0).astype("int32")
+    for column in DOUBLE_FEATURES:
+        df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0.0).astype("float64")
     df[TARGET_COLUMN] = pd.to_numeric(df[TARGET_COLUMN], errors="coerce").fillna(0.0)
 
     df = df.sort_values(["order_hour", "pizza_id"]).reset_index(drop=True)
@@ -253,6 +246,10 @@ def main() -> None:
                 "min_history_hours": MIN_HISTORY_HOURS,
                 "max_training_rows": MAX_TRAINING_ROWS,
                 "regressor": model.named_steps["model"].__class__.__name__,
+                "feature_count": len(FEATURE_COLUMNS),
+                "categorical_features": ",".join(CATEGORICAL_FEATURES),
+                "integer_features": ",".join(INTEGER_FEATURES),
+                "double_features": ",".join(DOUBLE_FEATURES),
             }
         )
         mlflow.log_metrics(metrics)

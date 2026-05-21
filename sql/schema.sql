@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS demand_predictions (
     pizza_size TEXT,
     pizza_category TEXT,
 
-    predicted_quantity NUMERIC(12, 4) NOT NULL,
+    predicted_quantity BIGINT NOT NULL,
     model_name TEXT NOT NULL,
     model_alias TEXT NOT NULL,
     model_version TEXT NOT NULL,
@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS demand_predictions (
     updated_at TIMESTAMP DEFAULT now(),
     PRIMARY KEY (target_hour, pizza_id)
 );
+
+ALTER TABLE demand_predictions
+    ALTER COLUMN predicted_quantity TYPE BIGINT
+    USING ROUND(predicted_quantity::numeric)::BIGINT;
 
 CREATE TABLE IF NOT EXISTS ingredient_risk_predictions (
     target_hour TIMESTAMP NOT NULL,

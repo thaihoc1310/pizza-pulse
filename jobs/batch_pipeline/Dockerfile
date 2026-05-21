@@ -22,6 +22,7 @@ RUN python3 -m pip install --no-cache-dir \
 RUN mkdir -p /opt/spark/jobs
 
 COPY common.py /opt/spark/jobs/common.py
+COPY feature_contract.py /opt/spark/jobs/feature_contract.py
 COPY etl_orders.py /opt/spark/jobs/etl_orders.py
 COPY feature_engineering.py /opt/spark/jobs/feature_engineering.py
 COPY train_candidate_model.py /opt/spark/jobs/train_candidate_model.py

@@ -1,4 +1,6 @@
 from pyspark.sql.functions import (
+    avg,
+    coalesce,
     col,
     countDistinct,
     current_timestamp,
@@ -9,6 +11,7 @@ from pyspark.sql.functions import (
     hour,
     lit,
     month,
+    regexp_replace,
     sum as spark_sum,
     to_date,
 )
@@ -52,6 +55,7 @@ def main() -> None:
             col("pizza_name"),
             col("pizza_size"),
             col("pizza_category"),
+            col("unit_price").cast("double").alias("catalog_unit_price"),
         )
         .dropDuplicates(["pizza_id"])
     )
@@ -65,8 +69,11 @@ def main() -> None:
         .withColumn("day_of_week", dayofweek(col("order_ts")))
         .withColumn("day_of_month", dayofmonth(col("order_ts")))
         .withColumn("month", month(col("order_ts")))
+        .withColumn("pizza_family", regexp_replace(col("pizza_id"), "_(?:s|m|l|xl|xxl)$", ""))
+        .withColumn("unit_price", coalesce(col("catalog_unit_price"), col("unit_price")))
         .withColumn("batch_run_tag", lit(RUN_TAG))
         .withColumn("processed_at", current_timestamp())
+        .drop("catalog_unit_price")
     )
 
     if line_items.limit(1).count() == 0:
@@ -80,11 +87,13 @@ def main() -> None:
             "pizza_name",
             "pizza_size",
             "pizza_category",
+            "pizza_family",
         )
         .agg(
             spark_sum("quantity").alias("quantity"),
             spark_sum("total_price").alias("revenue"),
             countDistinct("order_id").alias("order_count"),
+            avg("unit_price").alias("unit_price"),
         )
         .withColumn("hour", hour(col("order_hour")))
         .withColumn("day_of_week", dayofweek(col("order_hour")))

@@ -3,16 +3,45 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import math
 import time
 from typing import Any, Callable
 
 
-NUMERIC_FEATURES = [
+INTEGER_FEATURES = [
     "hour",
     "day_of_week",
     "day_of_month",
     "month",
+    "year",
     "is_weekend",
+    "is_open_hour",
+    "is_lunch_peak",
+    "is_dinner_peak",
+    "is_peak_hour",
+    "is_holiday",
+    "is_major_holiday",
+]
+DOUBLE_FEATURES = [
+    "years_since_2015",
+    "annual_growth_factor",
+    "month_factor",
+    "weekday_factor",
+    "holiday_mean_units",
+    "hour_weight",
+    "daily_demand_prior",
+    "hour_demand_prior",
+    "unit_price",
+    "pizza_base_weight",
+    "pizza_context_weight",
+    "pizza_context_share",
+    "pizza_hour_demand_prior",
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "month_sin",
+    "month_cos",
     "lag_1h",
     "lag_24h",
     "lag_168h",
@@ -21,8 +50,26 @@ NUMERIC_FEATURES = [
     "rolling_mean_168h",
     "rolling_sum_168h",
 ]
-CATEGORICAL_FEATURES = ["pizza_id", "pizza_size", "pizza_category"]
+NUMERIC_FEATURES = INTEGER_FEATURES + DOUBLE_FEATURES
+CATEGORICAL_FEATURES = [
+    "pizza_id",
+    "pizza_size",
+    "pizza_category",
+    "pizza_family",
+    "holiday_name",
+    "daypart",
+]
 FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+
+
+def integer_quantity(value: Any) -> int:
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return 0
+    if not math.isfinite(numeric_value):
+        return 0
+    return int(math.floor(max(numeric_value, 0.0) + 0.5))
 
 
 @dataclass(frozen=True)
@@ -105,7 +152,7 @@ def prediction_event(record: dict[str, Any]) -> dict[str, Any]:
         "pizza_name": record.get("pizza_name"),
         "pizza_size": record.get("pizza_size"),
         "pizza_category": record.get("pizza_category"),
-        "predicted_quantity": float(record["predicted_quantity"]),
+        "predicted_quantity": integer_quantity(record["predicted_quantity"]),
         "model_name": record["model_name"],
         "model_alias": record["model_alias"],
         "model_version": str(record["model_version"]),
