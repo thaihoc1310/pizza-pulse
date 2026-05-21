@@ -14,7 +14,7 @@ Minimal request body:
 ```json
 {
   "order": {
-    "order_ts": "2023-01-01T12:30:00+07:00",
+    "order_ts": "2021-01-01T12:30:00+07:00",
     "source": "pos-api",
     "items": [
       {
@@ -32,7 +32,7 @@ Minimal request body:
 }
 ```
 
-If omitted, the backend generates `order_id`, `order_ts`, `order_details_id`, `total_price`, `event_id`, and `event_ts`. The historical training data covers `2015-01-01` through `2022-12-31`, so replay/demo orders should usually use `2023-01-01` or later.
+If omitted, the backend generates `order_id`, `order_ts`, `order_details_id`, `total_price`, `event_id`, and `event_ts`. The historical training data covers `2015-01-01` through `2020-12-31`, so replay/demo orders should usually use `2021-01-01` or later.
 
 ## Kafka Event
 
@@ -115,7 +115,7 @@ Run the interactive demo generator:
 
 ```bash
 scripts/pizza-backend-client.py publish-order
-scripts/pizza-backend-client.py publish-order --date 2023-01-05 --time-range 12:00-13:00
+scripts/pizza-backend-client.py publish-order --date 2021-01-05 --time-range 12:00-13:00
 ```
 
 It prompts only for a date and time range when they are not passed as flags. The script reads pizzas from `GET /pizzas`, uses the same weekday/month/holiday/hour and pizza preference rules as `gen-data/generate_pizza_sales.py`, decides the order count automatically, and replays the selected order-time window at `1` simulated minute per `0.5` real seconds by default.

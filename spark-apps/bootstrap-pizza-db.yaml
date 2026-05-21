@@ -21,7 +21,7 @@ spec:
 
   driver:
     cores: 1
-    memory: "1g"
+    memory: "2g"
     serviceAccount: pp-spark-operator-spark
     env:
       - name: POSTGRES_HOST
@@ -57,7 +57,7 @@ spec:
   executor:
     instances: 2
     cores: 1
-    memory: "1g"
+    memory: "2g"
     env:
       - name: POSTGRES_HOST
         value: pp-postgre-postgresql

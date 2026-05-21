@@ -20,7 +20,7 @@ That guide covers the required Helm repositories, namespace creation, PostgreSQL
 - `services/pizza_backend/`: FastAPI backend for pizza catalog and online order ingestion
 - `services/dashboard/`: Streamlit realtime dashboard
 - `sql/`: Database schema
-- `dataset/`: Local sample data with historical order timestamps from `2015-01-01` through `2022-12-31`
+- `dataset/`: Local sample data with historical order timestamps from `2015-01-01` through `2020-12-31`
 - `scripts/`: Local helper scripts
 
 ## Batch MLOps Pipeline

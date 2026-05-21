@@ -111,37 +111,55 @@ HOLIDAY_MEAN_UNITS = {
 }
 
 CATEGORY_WEIGHTS = {
-    "Classic": 1.15,
-    "Chicken": 1.06,
-    "Supreme": 0.98,
-    "Veggie": 0.90,
+    "Classic": 1.22,
+    "Chicken": 1.08,
+    "Supreme": 0.92,
+    "Veggie": 0.78,
 }
 
 SIZE_WEIGHTS = {
-    "S": 0.92,
-    "M": 1.30,
-    "L": 1.12,
-    "XL": 0.18,
-    "XXL": 0.06,
+    "S": 0.62,
+    "M": 1.55,
+    "L": 1.20,
+    "XL": 0.12,
+    "XXL": 0.04,
 }
 
+LONG_TAIL_FAMILY_WEIGHT = 0.45
+
 FAMILY_WEIGHTS = {
-    "classic_dlx": 1.45,
-    "pepperoni": 1.38,
-    "bbq_ckn": 1.32,
-    "thai_ckn": 1.28,
-    "hawaiian": 1.25,
-    "cali_ckn": 1.22,
-    "four_cheese": 1.18,
-    "ital_supr": 1.16,
-    "spicy_ital": 1.14,
-    "southw_ckn": 1.12,
-    "five_cheese": 1.10,
-    "mexicana": 1.08,
-    "big_meat": 1.05,
-    "brie_carre": 0.35,
-    "the_greek": 0.65,
-    "green_garden": 0.82,
+    "classic_dlx": 28.0,
+    "pepperoni": 24.0,
+    "bbq_ckn": 20.0,
+    "hawaiian": 16.0,
+    "cali_ckn": 14.0,
+    "thai_ckn": 13.0,
+    "four_cheese": 10.0,
+    "ital_supr": 9.0,
+    "spicy_ital": 8.5,
+    "southw_ckn": 8.0,
+    "five_cheese": 7.5,
+    "mexicana": 7.0,
+    "big_meat": 6.5,
+    "pep_msh_pep": 6.0,
+    "ckn_alfredo": 4.0,
+    "ckn_pesto": 3.8,
+    "napolitana": 3.4,
+    "ital_cpcllo": 3.2,
+    "sicilian": 3.0,
+    "peppr_salami": 2.7,
+    "spinach_fet": 2.2,
+    "soppressata": 2.0,
+    "calabrese": 1.5,
+    "spinach_supr": 1.3,
+    "veggie_veg": 1.2,
+    "prsc_argla": 1.1,
+    "spin_pesto": 1.0,
+    "mediterraneo": 0.9,
+    "ital_veggie": 0.85,
+    "green_garden": 0.75,
+    "the_greek": 0.55,
+    "brie_carre": 0.30,
 }
 
 SUPER_BOWL_FAMILIES = {"pepperoni", "classic_dlx", "bbq_ckn", "big_meat", "pep_msh_pep"}
@@ -341,7 +359,7 @@ def add_generator_pizza_features(df, timestamp_col: str):
         "pizza_base_weight",
         map_value(col("pizza_category"), CATEGORY_WEIGHTS, 1.0)
         * map_value(col("pizza_size"), SIZE_WEIGHTS, 1.0)
-        * map_value(col("pizza_family"), FAMILY_WEIGHTS, 1.0)
+        * map_value(col("pizza_family"), FAMILY_WEIGHTS, LONG_TAIL_FAMILY_WEIGHT)
         * price_weight,
     )
 

@@ -44,37 +44,55 @@ HOUR_WEIGHTS = {
 }
 
 CATEGORY_WEIGHTS = {
-    "Classic": 1.15,
-    "Chicken": 1.06,
-    "Supreme": 0.98,
-    "Veggie": 0.90,
+    "Classic": 1.22,
+    "Chicken": 1.08,
+    "Supreme": 0.92,
+    "Veggie": 0.78,
 }
 
 SIZE_WEIGHTS = {
-    "S": 0.92,
-    "M": 1.30,
-    "L": 1.12,
-    "XL": 0.18,
-    "XXL": 0.06,
+    "S": 0.62,
+    "M": 1.55,
+    "L": 1.20,
+    "XL": 0.12,
+    "XXL": 0.04,
 }
 
+LONG_TAIL_FAMILY_WEIGHT = 0.45
+
 FAMILY_WEIGHTS = {
-    "classic_dlx": 1.45,
-    "pepperoni": 1.38,
-    "bbq_ckn": 1.32,
-    "thai_ckn": 1.28,
-    "hawaiian": 1.25,
-    "cali_ckn": 1.22,
-    "four_cheese": 1.18,
-    "ital_supr": 1.16,
-    "spicy_ital": 1.14,
-    "southw_ckn": 1.12,
-    "five_cheese": 1.10,
-    "mexicana": 1.08,
-    "big_meat": 1.05,
-    "brie_carre": 0.35,
-    "the_greek": 0.65,
-    "green_garden": 0.82,
+    "classic_dlx": 28.0,
+    "pepperoni": 24.0,
+    "bbq_ckn": 20.0,
+    "hawaiian": 16.0,
+    "cali_ckn": 14.0,
+    "thai_ckn": 13.0,
+    "four_cheese": 10.0,
+    "ital_supr": 9.0,
+    "spicy_ital": 8.5,
+    "southw_ckn": 8.0,
+    "five_cheese": 7.5,
+    "mexicana": 7.0,
+    "big_meat": 6.5,
+    "pep_msh_pep": 6.0,
+    "ckn_alfredo": 4.0,
+    "ckn_pesto": 3.8,
+    "napolitana": 3.4,
+    "ital_cpcllo": 3.2,
+    "sicilian": 3.0,
+    "peppr_salami": 2.7,
+    "spinach_fet": 2.2,
+    "soppressata": 2.0,
+    "calabrese": 1.5,
+    "spinach_supr": 1.3,
+    "veggie_veg": 1.2,
+    "prsc_argla": 1.1,
+    "spin_pesto": 1.0,
+    "mediterraneo": 0.9,
+    "ital_veggie": 0.85,
+    "green_garden": 0.75,
+    "the_greek": 0.55,
+    "brie_carre": 0.30,
 }
 
 SUPER_BOWL_FAMILIES = {"pepperoni", "classic_dlx", "bbq_ckn", "big_meat", "pep_msh_pep"}
@@ -118,7 +136,7 @@ def parse_args() -> argparse.Namespace:
 
     publish = subparsers.add_parser("publish-order", help="Publish orders through the backend.")
     publish.add_argument("--input", help="Path to one order JSON. Use '-' for stdin.")
-    publish.add_argument("--date", help="Replay date, e.g. 1/1/2023 or 2023-01-01.")
+    publish.add_argument("--date", help="Replay date, e.g. 1/1/2021 or 2021-01-01.")
     publish.add_argument("--time-range", help="Replay time range, e.g. 11:50-13:00.")
 
     persist = publish.add_mutually_exclusive_group()
@@ -149,7 +167,7 @@ def load_payload(path: str) -> dict:
 def publish_generated_orders(args: argparse.Namespace) -> None:
     api_url = args.api_url.rstrip("/")
     pizzas = fetch_pizzas(api_url)
-    demo_date = parse_demo_date(args.date or prompt("Date (d/m/yyyy or yyyy-mm-dd)", "1/1/2023"))
+    demo_date = parse_demo_date(args.date or prompt("Date (d/m/yyyy or yyyy-mm-dd)", "1/1/2021"))
     start_time, end_time = parse_time_range(
         args.time_range or prompt("Time range (HH:MM-HH:MM)", "11:50-13:00")
     )
@@ -339,7 +357,7 @@ def choose_pizza(
 def base_pizza_weight(pizza: dict) -> float:
     category_weight = CATEGORY_WEIGHTS.get(pizza.get("pizza_category"), 1.0)
     size_weight = SIZE_WEIGHTS.get(pizza.get("pizza_size"), 1.0)
-    family_weight = FAMILY_WEIGHTS.get(pizza_family(pizza), 1.0)
+    family_weight = FAMILY_WEIGHTS.get(pizza_family(pizza), LONG_TAIL_FAMILY_WEIGHT)
     unit_price = max(float(pizza.get("unit_price") or 16.0), 0.01)
     price_weight = (16.0 / unit_price) ** 0.35
     return category_weight * size_weight * family_weight * price_weight
