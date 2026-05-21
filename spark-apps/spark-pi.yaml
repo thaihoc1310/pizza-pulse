@@ -1,7 +1,7 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: "spark-pi-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}-try{{ ti.try_number }}"
+  name: "spark-pi-{{ dag_run.run_after.strftime('%Y%m%dt%H%M%S') }}-try{{ ti.try_number }}"
   namespace: pizza-pulse
 spec:
   type: Scala

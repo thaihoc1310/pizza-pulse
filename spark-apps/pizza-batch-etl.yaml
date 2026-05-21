@@ -1,7 +1,7 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: "pizza-batch-etl-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}-try{{ ti.try_number }}"
+  name: "pizza-batch-etl-{{ dag_run.run_after.strftime('%Y%m%dt%H%M%S') }}-try{{ ti.try_number }}"
   namespace: pizza-pulse
 spec:
   type: Python
@@ -67,7 +67,7 @@ spec:
       - name: PIPELINE_TIMEZONE
         value: Asia/Ho_Chi_Minh
       - name: BATCH_RUN_TAG
-        value: "{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}"
+        value: "{{ dag_run.run_after.strftime('%Y%m%dt%H%M%S') }}"
 
   executor:
     instances: 3

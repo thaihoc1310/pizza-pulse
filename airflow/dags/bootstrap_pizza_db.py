@@ -6,7 +6,7 @@ from airflow.providers.cncf.kubernetes.sensors.spark_kubernetes import SparkKube
 from airflow.utils.task_group import TaskGroup
 
 
-APP_NAME = "bootstrap-pizza-db-{{ (logical_date or dag_run.run_after).strftime('%Y%m%dt%H%M%S') }}"
+APP_NAME = "bootstrap-pizza-db-{{ dag_run.run_after.strftime('%Y%m%dt%H%M%S') }}"
 
 with DAG(
     dag_id="bootstrap_pizza_db",
