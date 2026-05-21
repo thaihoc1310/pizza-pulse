@@ -13,6 +13,7 @@ import pandas as pd
 import pyarrow.dataset as ds
 import pyarrow.fs as fs
 from mlflow.models import infer_signature
+from mlflow.tracking import MlflowClient
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.pipeline import Pipeline
@@ -303,9 +304,24 @@ def log_feature_importance(model: Pipeline) -> None:
     mlflow.log_artifact(str(path), artifact_path="diagnostics")
 
 
+def ensure_experiment() -> str:
+    client = MlflowClient()
+    experiment = client.get_experiment_by_name(EXPERIMENT_NAME)
+    if experiment is not None:
+        return experiment.experiment_id
+
+    try:
+        return client.create_experiment(EXPERIMENT_NAME)
+    except Exception:
+        experiment = client.get_experiment_by_name(EXPERIMENT_NAME)
+        if experiment is not None:
+            return experiment.experiment_id
+        raise
+
+
 def main() -> None:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(EXPERIMENT_NAME)
+    experiment_id = ensure_experiment()
 
     df = prepare_training_frame()
     train_df, test_df, split_strategy = split_training_frame(df)
@@ -321,7 +337,7 @@ def main() -> None:
     prediction = model.predict(x_test)
     metrics = regression_metrics(y_test, prediction)
 
-    with mlflow.start_run(run_name=f"{MODEL_FLAVOR}-{RUN_TAG}") as run:
+    with mlflow.start_run(experiment_id=experiment_id, run_name=f"{MODEL_FLAVOR}-{RUN_TAG}") as run:
         mlflow.set_tags(
             {
                 "pipeline_step": "candidate_train",
