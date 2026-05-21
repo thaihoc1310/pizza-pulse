@@ -1,0 +1,18 @@
+{
+  "order": {
+    "order_ts": "2016-01-01T12:30:00+07:00",
+    "source": "pos-api",
+    "items": [
+      {
+        "pizza_id": "classic_dlx_m",
+        "quantity": 2,
+        "unit_price": 16.0
+      },
+      {
+        "pizza_id": "bbq_ckn_l",
+        "quantity": 1,
+        "unit_price": 20.75
+      }
+    ]
+  }
+}

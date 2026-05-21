@@ -16,7 +16,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY") or os.getenv("AWS_ACCESS_KEY_ID
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY")
 
 LAKEHOUSE_ROOT = os.getenv("LAKEHOUSE_ROOT", "s3a://pp-lakehouse")
-PIPELINE_TIMEZONE = os.getenv("PIPELINE_TIMEZONE", "Asia/Bangkok")
+PIPELINE_TIMEZONE = os.getenv("PIPELINE_TIMEZONE", "Asia/Ho_Chi_Minh")
 RUN_TAG = re.sub(r"[^a-zA-Z0-9_.=-]+", "-", os.getenv("BATCH_RUN_TAG", "manual")).strip("-")
 
 JDBC_URL = f"jdbc:postgresql://{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"

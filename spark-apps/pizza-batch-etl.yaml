@@ -65,7 +65,7 @@ spec:
       - name: LAKEHOUSE_ROOT
         value: s3a://pp-lakehouse
       - name: PIPELINE_TIMEZONE
-        value: Asia/Bangkok
+        value: Asia/Ho_Chi_Minh
       - name: BATCH_RUN_TAG
         value: "{{ ts_nodash | lower }}"
 

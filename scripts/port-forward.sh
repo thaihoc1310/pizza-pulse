@@ -14,6 +14,7 @@ MLFLOW_SERVICE="${MLFLOW_SERVICE:-pp-mlflow}"
 KAFKA_SERVICE="${KAFKA_SERVICE:-pp-kafka-kafka-bootstrap}"
 KAFKA_UI_SERVICE="${KAFKA_UI_SERVICE:-pp-kafka-ui}"
 AIRFLOW_API_SERVICE="${AIRFLOW_API_SERVICE:-pp-airflow-api-server}"
+BACKEND_SERVICE="${BACKEND_SERVICE:-pp-backend}"
 
 # Local ports can also be changed from the environment.
 POSTGRES_LOCAL_PORT="${POSTGRES_LOCAL_PORT:-5432}"
@@ -23,6 +24,7 @@ MLFLOW_LOCAL_PORT="${MLFLOW_LOCAL_PORT:-5000}"
 KAFKA_LOCAL_PORT="${KAFKA_LOCAL_PORT:-9092}"
 KAFKA_UI_LOCAL_PORT="${KAFKA_UI_LOCAL_PORT:-8082}"
 AIRFLOW_API_LOCAL_PORT="${AIRFLOW_API_LOCAL_PORT:-8080}"
+BACKEND_LOCAL_PORT="${BACKEND_LOCAL_PORT:-8083}"
 
 FORWARDS=(
   "postgres|$POSTGRES_SERVICE|$POSTGRES_LOCAL_PORT|5432"
@@ -32,6 +34,7 @@ FORWARDS=(
   "kafka|$KAFKA_SERVICE|$KAFKA_LOCAL_PORT|9092"
   "kafka-ui|$KAFKA_UI_SERVICE|$KAFKA_UI_LOCAL_PORT|80"
   "airflow-api|$AIRFLOW_API_SERVICE|$AIRFLOW_API_LOCAL_PORT|8080"
+  "backend|$BACKEND_SERVICE|$BACKEND_LOCAL_PORT|80"
 )
 
 usage() {
@@ -52,6 +55,7 @@ Environment overrides:
   KAFKA_SERVICE=pp-kafka-kafka-bootstrap
   KAFKA_UI_SERVICE=pp-kafka-ui
   AIRFLOW_API_SERVICE=pp-airflow-api-server
+  BACKEND_SERVICE=pp-backend
 
   POSTGRES_LOCAL_PORT=5432
   MINIO_API_LOCAL_PORT=9000
@@ -60,6 +64,7 @@ Environment overrides:
   KAFKA_LOCAL_PORT=9092
   KAFKA_UI_LOCAL_PORT=8082
   AIRFLOW_API_LOCAL_PORT=8080
+  BACKEND_LOCAL_PORT=8083
 USAGE
 }
 
@@ -149,6 +154,11 @@ start_one() {
   if pid="$(existing_pid "$name" 2>/dev/null)" && is_running "$pid"; then
     printf '%-14s already running  pid=%s  localhost:%s -> svc/%s:%s\n' \
       "$name" "$pid" "$local_port" "$service" "$remote_port"
+    return 0
+  fi
+
+  if [[ "$name" == "backend" ]] && ! service_exists "$service"; then
+    printf '%-14s skipped          svc/%s not found\n' "$name" "$service"
     return 0
   fi
 
