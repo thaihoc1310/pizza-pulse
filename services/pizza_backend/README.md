@@ -122,6 +122,6 @@ It prompts for a date, time range, and number of orders, reads pizzas from `GET 
 ## Image
 
 ```bash
-docker build -t thaihoc285/pp-backend:0.0.1 services/pizza_backend
-docker push thaihoc285/pp-backend:0.0.1
+docker build -t manhhung1685/pp-backend:0.0.1 services/pizza_backend
+docker push manhhung1685/pp-backend:0.0.1
 ```

@@ -54,8 +54,8 @@ If you use a different registry or tag, update the image in `airflow/dags/pizza_
 Build the image:
 
 ```bash
-docker build -t thaihoc285/pp-backend:0.0.1 services/pizza_backend
-docker push thaihoc285/pp-backend:0.0.1
+docker build -t manhhung1685/pp-backend:0.0.1 services/pizza_backend
+docker push manhhung1685/pp-backend:0.0.1
 ```
 
 Deploy it:
