@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -8,7 +10,7 @@ from kubernetes.client import models as k8s
 
 NAMESPACE = "pizza-pulse"
 KUBERNETES_CONN_ID = "kubernetes_default"
-BATCH_IMAGE = "thaihoc285/ppbatch-pipeline:0.0.1"
+BATCH_IMAGE = "manhhung1685/ppbatch-pipeline:0.0.1"
 
 SPARK_APPLICATIONS = {
     "etl_orders": {

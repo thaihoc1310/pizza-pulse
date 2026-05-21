@@ -7,7 +7,7 @@ spec:
   type: Python
   mode: cluster
 
-  image: thaihoc285/ppbatch-pipeline:0.0.1
+  image: manhhung1685/ppbatch-pipeline:0.0.1
   imagePullPolicy: Always
 
   mainApplicationFile: local:///opt/spark/jobs/etl_orders.py

@@ -67,6 +67,8 @@ def set_version_tags(client: MlflowClient, version: str, best_run: Run, promoted
         SELECTION_METRIC: str(metric_value(best_run, SELECTION_METRIC)),
         "validation_mae": str(best_run.data.metrics.get("validation_mae", "")),
         "validation_wmape": str(best_run.data.metrics.get("validation_wmape", "")),
+        "validation_mape": str(best_run.data.metrics.get("validation_mape", "")),
+        "validation_r2": str(best_run.data.metrics.get("validation_r2", "")),
         "promoted": str(promoted).lower(),
     }
     for key, value in tags.items():

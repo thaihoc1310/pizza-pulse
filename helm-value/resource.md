@@ -29,7 +29,7 @@ Batch MLOps DAG:
 pizza_batch_mlops
 
 Batch job image:
-thaihoc285/ppbatch-pipeline:0.0.1
+manhhung1685/ppbatch-pipeline:0.0.1
 
 Batch SparkApplications:
 pizza-batch-etl.yaml

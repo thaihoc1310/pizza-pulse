@@ -51,7 +51,8 @@ def main() -> None:
             col("pizza_id"),
             col("pizza_name"),
             col("pizza_size"),
-            col("pizza_category"),
+            col("pizza_category").alias("pizza_type"),
+            col("unit_price").cast("double").alias("catalog_unit_price"),
         )
         .dropDuplicates(["pizza_id"])
     )
@@ -59,14 +60,39 @@ def main() -> None:
     line_items = (
         order_items.join(orders, on="order_id", how="inner")
         .join(pizza, on="pizza_id", how="left")
-        .withColumn("order_hour", date_trunc("hour", col("order_ts")))
-        .withColumn("order_date", to_date(col("order_ts")))
-        .withColumn("hour", hour(col("order_ts")))
-        .withColumn("day_of_week", dayofweek(col("order_ts")))
-        .withColumn("day_of_month", dayofmonth(col("order_ts")))
-        .withColumn("month", month(col("order_ts")))
+        .withColumn("event_time", col("order_ts"))
+        .withColumn("order_hour", date_trunc("hour", col("event_time")))
+        .withColumn("order_date", to_date(col("event_time")))
+        .withColumn("hour", hour(col("event_time")))
+        .withColumn("day_of_week", dayofweek(col("event_time")))
+        .withColumn("day_of_month", dayofmonth(col("event_time")))
+        .withColumn("month", month(col("event_time")))
+        .withColumn("unit_price", col("unit_price").cast("double"))
+        .withColumn("total_price", col("total_price").cast("double"))
+        .withColumn("quantity", col("quantity").cast("double"))
         .withColumn("batch_run_tag", lit(RUN_TAG))
         .withColumn("processed_at", current_timestamp())
+        .select(
+            "order_details_id",
+            "order_id",
+            "pizza_id",
+            "pizza_name",
+            "pizza_size",
+            "pizza_type",
+            "quantity",
+            "event_time",
+            "unit_price",
+            "catalog_unit_price",
+            "total_price",
+            "order_hour",
+            "order_date",
+            "hour",
+            "day_of_week",
+            "day_of_month",
+            "month",
+            "batch_run_tag",
+            "processed_at",
+        )
     )
 
     if line_items.limit(1).count() == 0:
@@ -79,7 +105,7 @@ def main() -> None:
             "pizza_id",
             "pizza_name",
             "pizza_size",
-            "pizza_category",
+            "pizza_type",
         )
         .agg(
             spark_sum("quantity").alias("quantity"),

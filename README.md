@@ -34,8 +34,8 @@ Batch training does not write prediction tables to PostgreSQL. Validation predic
 Build and push the shared batch image after editing any batch job:
 
 ```bash
-docker build -t thaihoc285/ppbatch-pipeline:0.0.1 jobs/batch_pipeline
-docker push thaihoc285/ppbatch-pipeline:0.0.1
+docker build -t manhhung1685/ppbatch-pipeline:0.0.1 jobs/batch_pipeline
+docker push manhhung1685/ppbatch-pipeline:0.0.1
 ```
 
 If you use a different registry or tag, update the image in `airflow/dags/pizza_batch_mlops.py` and the matching `spark-apps/pizza-batch-*.yaml` image fields.

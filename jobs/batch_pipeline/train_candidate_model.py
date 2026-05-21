@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import math
 import os
 import re
+import json
 from pathlib import Path
 
 import mlflow
@@ -11,7 +14,7 @@ import pyarrow.dataset as ds
 import pyarrow.fs as fs
 from mlflow.models import infer_signature
 from sklearn.compose import ColumnTransformer
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
@@ -27,27 +30,39 @@ EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "pizza-pulse-batch")
 MODEL_NAME = os.getenv("MODEL_NAME", "pizza_hourly_demand")
 MODEL_FLAVOR = os.getenv("MODEL_FLAVOR", "lightgbm").lower()
 
-TRAIN_SPLIT_FRACTION = float(os.getenv("TRAIN_SPLIT_FRACTION", "0.8"))
+TRAIN_SPLIT_FRACTION = float(os.getenv("TRAIN_SPLIT_FRACTION", "0.7"))
 MAX_TRAINING_ROWS = int(os.getenv("MAX_TRAINING_ROWS", "500000"))
 MIN_HISTORY_HOURS = int(os.getenv("MIN_HISTORY_HOURS", "168"))
 
-CATEGORICAL_FEATURES = ["pizza_id", "pizza_size", "pizza_category"]
+CATEGORICAL_FEATURES = ["pizza_name", "pizza_size", "pizza_type"]
 NUMERIC_FEATURES = [
-    "hour",
+    "unit_price",
+    "ingredient_count",
+    "hour_of_day",
     "day_of_week",
-    "day_of_month",
     "month",
     "is_weekend",
-    "lag_1h",
-    "lag_24h",
-    "lag_168h",
-    "rolling_mean_24h",
-    "rolling_sum_24h",
-    "rolling_mean_168h",
-    "rolling_sum_168h",
+    "is_lunch_time",
+    "is_dinner_time",
+    "qty_last_15m",
+    "qty_last_30m",
+    "qty_last_1h",
+    "revenue_last_1h",
+    "order_count_last_1h",
+    "qty_prev_15m",
+    "qty_prev_1h",
+    "growth_15m_vs_prev_15m",
+    "growth_1h_vs_prev_1h",
+    "qty_lag_1h",
+    "qty_lag_24h",
+    "avg_qty_same_hour_last_7d",
+    "store_total_qty_last_15m",
+    "store_total_qty_last_1h",
+    "store_order_count_last_1h",
 ]
 FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-TARGET_COLUMN = "target_quantity"
+TARGET_COLUMN = "target_quantity_next_1h"
+TIME_COLUMN = "feature_time"
 
 
 def require_runtime_config() -> None:
@@ -139,10 +154,15 @@ def regression_metrics(y_true, y_pred) -> dict:
     rmse = float(math.sqrt(np.mean(np.square(error))))
     mae = float(mean_absolute_error(actual, clipped_pred))
     wmape = float(np.sum(np.abs(error)) / max(np.sum(np.abs(actual)), 1.0))
+    non_zero = np.abs(actual) > 1e-9
+    mape = float(np.mean(np.abs(error[non_zero] / actual[non_zero]))) if np.any(non_zero) else 0.0
+    r2 = float(r2_score(actual, clipped_pred)) if len(actual) > 1 else 0.0
     return {
         "validation_rmse": rmse,
         "validation_mae": mae,
         "validation_wmape": wmape,
+        "validation_mape": mape,
+        "validation_r2": r2,
     }
 
 
@@ -155,15 +175,15 @@ def prepare_training_frame() -> pd.DataFrame:
         partitioning="hive",
     )
 
-    table = dataset.to_table(columns=["order_hour", TARGET_COLUMN, *FEATURE_COLUMNS])
+    table = dataset.to_table(columns=[TIME_COLUMN, TARGET_COLUMN, *FEATURE_COLUMNS])
     df = table.to_pandas()
     if df.empty:
         raise RuntimeError(f"No feature rows found in {GOLD_FEATURES_PATH}. Run feature engineering first.")
 
-    df = df.dropna(subset=["order_hour", TARGET_COLUMN])
-    df["order_hour"] = pd.to_datetime(df["order_hour"])
-    min_hour = df["order_hour"].min()
-    df = df[df["order_hour"] >= min_hour + pd.Timedelta(hours=MIN_HISTORY_HOURS)]
+    df = df.dropna(subset=[TIME_COLUMN, TARGET_COLUMN])
+    df[TIME_COLUMN] = pd.to_datetime(df[TIME_COLUMN])
+    min_time = df[TIME_COLUMN].min()
+    df = df[df[TIME_COLUMN] >= min_time + pd.Timedelta(hours=MIN_HISTORY_HOURS)]
 
     for column in CATEGORICAL_FEATURES:
         df[column] = df[column].fillna("unknown").astype(str)
@@ -171,7 +191,7 @@ def prepare_training_frame() -> pd.DataFrame:
         df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0.0)
     df[TARGET_COLUMN] = pd.to_numeric(df[TARGET_COLUMN], errors="coerce").fillna(0.0)
 
-    df = df.sort_values(["order_hour", "pizza_id"]).reset_index(drop=True)
+    df = df.sort_values([TIME_COLUMN, "pizza_name", "pizza_size"]).reset_index(drop=True)
     if MAX_TRAINING_ROWS > 0 and len(df) > MAX_TRAINING_ROWS:
         df = df.tail(MAX_TRAINING_ROWS).reset_index(drop=True)
 
@@ -181,14 +201,84 @@ def prepare_training_frame() -> pd.DataFrame:
     return df
 
 
+def validate_train_split_fraction() -> None:
+    if not 0.0 < TRAIN_SPLIT_FRACTION < 1.0:
+        raise RuntimeError(f"TRAIN_SPLIT_FRACTION must be between 0 and 1, got {TRAIN_SPLIT_FRACTION}")
+
+
+def split_training_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    validate_train_split_fraction()
+
+    feature_times = pd.Series(df[TIME_COLUMN].dropna().unique()).sort_values(ignore_index=True)
+    if len(feature_times) < 2:
+        raise RuntimeError("Need at least two feature_time values for chronological train/holdout split.")
+
+    split_idx = int(len(feature_times) * TRAIN_SPLIT_FRACTION)
+    split_idx = min(max(split_idx, 1), len(feature_times) - 1)
+    holdout_start_time = feature_times.iloc[split_idx]
+
+    train_df = df[df[TIME_COLUMN] < holdout_start_time].copy()
+    holdout_df = df[df[TIME_COLUMN] >= holdout_start_time].copy()
+    if len(train_df) < 1 or len(holdout_df) < 1:
+        raise RuntimeError(
+            "Chronological 70/30 split produced an empty train or holdout set: "
+            f"train_rows={len(train_df)}, holdout_rows={len(holdout_df)}"
+        )
+
+    return train_df, holdout_df, f"chronological_{TRAIN_SPLIT_FRACTION:.2f}_{1.0 - TRAIN_SPLIT_FRACTION:.2f}"
+
+
+def split_summary(train_df: pd.DataFrame, holdout_df: pd.DataFrame, feature_rows: int, split_strategy: str) -> dict:
+    return {
+        "split_strategy": split_strategy,
+        "train_split_fraction_config": TRAIN_SPLIT_FRACTION,
+        "holdout_split_fraction_config": 1.0 - TRAIN_SPLIT_FRACTION,
+        "feature_rows": int(feature_rows),
+        "train_rows": int(len(train_df)),
+        "holdout_rows": int(len(holdout_df)),
+        "actual_train_fraction": float(len(train_df) / feature_rows),
+        "actual_holdout_fraction": float(len(holdout_df) / feature_rows),
+        "train_time_start": str(train_df[TIME_COLUMN].min()),
+        "train_time_end": str(train_df[TIME_COLUMN].max()),
+        "holdout_time_start": str(holdout_df[TIME_COLUMN].min()),
+        "holdout_time_end": str(holdout_df[TIME_COLUMN].max()),
+    }
+
+
+def log_split_summary(summary: dict) -> None:
+    path = Path("/tmp/split_summary.json")
+    path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    mlflow.log_artifact(str(path), artifact_path="split")
+
+
 def log_validation_predictions(test_df: pd.DataFrame, predictions: np.ndarray) -> None:
-    output = test_df[["order_hour", "pizza_id", TARGET_COLUMN]].copy()
+    output = test_df[[TIME_COLUMN, "pizza_name", "pizza_size", TARGET_COLUMN]].copy()
     output["prediction"] = np.maximum(np.asarray(predictions, dtype=float), 0.0)
     output["absolute_error"] = (output[TARGET_COLUMN] - output["prediction"]).abs()
 
     path = Path(f"/tmp/{MODEL_FLAVOR}_validation_predictions.csv")
     output.to_csv(path, index=False)
     mlflow.log_artifact(str(path), artifact_path="validation")
+
+
+def log_feature_schema() -> None:
+    artifacts = {
+        "feature_columns.json": FEATURE_COLUMNS,
+        "categorical_columns.json": CATEGORICAL_FEATURES,
+        "feature_contract.json": {
+            "granularity": "1 row = pizza_name + pizza_size + 15-minute feature_time",
+            "target_column": TARGET_COLUMN,
+            "time_column": TIME_COLUMN,
+            "leakage_rule": "Features use events at or before feature_time; target uses the next four 15-minute bins.",
+            "offline_split_rule": "Train on the earliest 70% of feature_time values; compare on the remaining 30% holdout period.",
+            "numeric_features": NUMERIC_FEATURES,
+            "categorical_features": CATEGORICAL_FEATURES,
+        },
+    }
+    for filename, payload in artifacts.items():
+        path = Path("/tmp") / filename
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        mlflow.log_artifact(str(path), artifact_path="schema")
 
 
 def log_feature_importance(model: Pipeline) -> None:
@@ -218,11 +308,9 @@ def main() -> None:
     mlflow.set_experiment(EXPERIMENT_NAME)
 
     df = prepare_training_frame()
-    split_idx = int(len(df) * TRAIN_SPLIT_FRACTION)
-    split_idx = min(max(split_idx, 1), len(df) - 1)
+    train_df, test_df, split_strategy = split_training_frame(df)
+    split_info = split_summary(train_df, test_df, len(df), split_strategy)
 
-    train_df = df.iloc[:split_idx]
-    test_df = df.iloc[split_idx:]
     x_train = train_df[FEATURE_COLUMNS]
     y_train = train_df[TARGET_COLUMN]
     x_test = test_df[FEATURE_COLUMNS]
@@ -248,11 +336,22 @@ def main() -> None:
                 "batch_run_tag": RUN_TAG,
                 "train_rows": len(train_df),
                 "validation_rows": len(test_df),
+                "holdout_rows": len(test_df),
                 "feature_rows": len(df),
+                "split_strategy": split_strategy,
                 "train_split_fraction": TRAIN_SPLIT_FRACTION,
+                "holdout_split_fraction": 1.0 - TRAIN_SPLIT_FRACTION,
+                "actual_train_fraction": split_info["actual_train_fraction"],
+                "actual_holdout_fraction": split_info["actual_holdout_fraction"],
+                "train_time_start": split_info["train_time_start"],
+                "train_time_end": split_info["train_time_end"],
+                "holdout_time_start": split_info["holdout_time_start"],
+                "holdout_time_end": split_info["holdout_time_end"],
                 "min_history_hours": MIN_HISTORY_HOURS,
                 "max_training_rows": MAX_TRAINING_ROWS,
                 "regressor": model.named_steps["model"].__class__.__name__,
+                "target_column": TARGET_COLUMN,
+                "feature_granularity": "15_minutes",
             }
         )
         mlflow.log_metrics(metrics)
@@ -265,11 +364,14 @@ def main() -> None:
             input_example=x_train.head(5),
         )
         log_validation_predictions(test_df, prediction)
+        log_feature_schema()
+        log_split_summary(split_info)
         log_feature_importance(model)
 
         print("Candidate training completed.")
         print(f"run_id={run.info.run_id}")
         print(f"candidate_model={MODEL_FLAVOR}")
+        print(f"split_summary={split_info}")
         print(f"metrics={metrics}")
 
 

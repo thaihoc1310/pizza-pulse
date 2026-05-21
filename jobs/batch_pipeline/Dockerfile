@@ -2,6 +2,8 @@ FROM spark:3.5.0
 
 USER root
 
+ENV MPLCONFIGDIR=/tmp/matplotlib
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -15,6 +17,7 @@ RUN python3 -m pip install --no-cache-dir \
     "lightgbm>=4.0,<5" \
     "mlflow>=2.12,<3" \
     "numpy>=1.24,<2" \
+    "packaging<25" \
     "pandas>=2.0,<3" \
     "pyarrow>=14,<17" \
     "scikit-learn>=1.3,<2"

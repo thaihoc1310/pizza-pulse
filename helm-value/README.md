@@ -280,8 +280,8 @@ The `pizza_batch_mlops` DAG expects this image in `spark-apps/pizza-batch-*.yaml
 
 ```bash
 cd ..
-docker build -t thaihoc285/ppbatch-pipeline:0.0.1 jobs/batch_pipeline
-docker push thaihoc285/ppbatch-pipeline:0.0.1
+docker build -t manhhung1685/ppbatch-pipeline:0.0.1 jobs/batch_pipeline
+docker push manhhung1685/ppbatch-pipeline:0.0.1
 cd helm-value
 ```
 
