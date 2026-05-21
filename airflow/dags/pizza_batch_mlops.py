@@ -118,9 +118,9 @@ with DAG(
         pod_name="pizza-train-lightgbm-{{ ts_nodash | lower }}",
         script_path="/opt/spark/jobs/train_candidate_model.py",
         extra_env=[k8s.V1EnvVar(name="MODEL_FLAVOR", value="lightgbm")],
-        memory_request="4Gi",
+        memory_request="2Gi",
         memory_limit="8Gi",
-        cpu_request="2",
+        cpu_request="1",
         cpu_limit="4",
     )
     train_catboost = python_batch_pod(
@@ -128,9 +128,9 @@ with DAG(
         pod_name="pizza-train-catboost-{{ ts_nodash | lower }}",
         script_path="/opt/spark/jobs/train_candidate_model.py",
         extra_env=[k8s.V1EnvVar(name="MODEL_FLAVOR", value="catboost")],
-        memory_request="4Gi",
+        memory_request="2Gi",
         memory_limit="8Gi",
-        cpu_request="2",
+        cpu_request="1",
         cpu_limit="4",
     )
 
