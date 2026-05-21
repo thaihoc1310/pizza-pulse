@@ -7,7 +7,7 @@ spec:
   type: Python
   mode: cluster
 
-  image: thaihoc285/ppbootstrap-pizza-db:0.0.1
+  image: manhhung1685/ppbootstrap-pizza-db:0.0.1
   imagePullPolicy: Always
 
   mainApplicationFile: local:///opt/spark/jobs/bootstrap_pizza_db.py
