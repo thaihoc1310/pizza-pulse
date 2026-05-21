@@ -31,7 +31,7 @@ def spark_application_task(task_id: str, application_file: str) -> SparkKubernet
         do_xcom_push=False,
         random_name_suffix=False,
         get_logs=True,
-        delete_on_termination=False,
+        delete_on_termination=True,
         reattach_on_restart=False,
     )
 
