@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS ingredients (
     ingredient_id SERIAL PRIMARY KEY,
     ingredient_name TEXT UNIQUE NOT NULL,
 
-    current_stock NUMERIC(10, 2) NOT NULL DEFAULT 100,
+    current_stock NUMERIC(10, 2) NOT NULL DEFAULT 50,
 
     created_at TIMESTAMP DEFAULT now(),
     updated_at TIMESTAMP DEFAULT now()

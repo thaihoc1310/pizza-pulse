@@ -112,7 +112,7 @@ class RealtimeContractsTest(unittest.TestCase):
                 "ingredient_id": 1,
                 "ingredient_name": "Cheese",
                 "predicted_usage": 90.0,
-                "current_stock": 100.0,
+                "current_stock": 50.0,
                 "projected_stock": 10.0,
                 "severity": "warning",
                 "model_name": "pizza_hourly_demand",
