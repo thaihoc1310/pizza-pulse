@@ -1,36 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pp-backend
+  name: pp-dashboard
   namespace: pizza-pulse
   labels:
-    app.kubernetes.io/name: pp-backend
+    app.kubernetes.io/name: pp-dashboard
     app.kubernetes.io/part-of: pizza-pulse
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: pp-backend
+      app.kubernetes.io/name: pp-dashboard
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: pp-backend
+        app.kubernetes.io/name: pp-dashboard
         app.kubernetes.io/part-of: pizza-pulse
     spec:
       containers:
-        - name: backend
-          image: thaihoc285/pp-backend:0.0.1
+        - name: dashboard
+          image: thaihoc285/pp-dashboard:0.0.1
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8501
           env:
-            - name: KAFKA_BOOTSTRAP_SERVERS
-              value: pp-kafka-kafka-bootstrap:9092
-            - name: KAFKA_ORDER_TOPIC
-              value: pp.order.events
-            - name: POSTGRES_WRITE_ENABLED
-              value: "true"
             - name: POSTGRES_HOST
               value: pp-postgre-postgresql
             - name: POSTGRES_PORT
@@ -44,41 +38,42 @@ spec:
                 secretKeyRef:
                   name: pp-postgre-postgresql
                   key: postgres-password
-            - name: ORDER_TIMEZONE
-              value: Asia/Ho_Chi_Minh
+            - name: DASHBOARD_REFRESH_SECONDS
+              value: "5"
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /_stcore/health
               port: http
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /_stcore/health
               port: http
-            initialDelaySeconds: 15
+            initialDelaySeconds: 20
             periodSeconds: 20
           resources:
             requests:
-              cpu: 200m
-              memory: 512Mi
-            limits:
               cpu: 500m
               memory: 1Gi
+            limits:
+              cpu: 1
+              memory: 2Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pp-backend
+  name: pp-dashboard
   namespace: pizza-pulse
   labels:
-    app.kubernetes.io/name: pp-backend
+    app.kubernetes.io/name: pp-dashboard
     app.kubernetes.io/part-of: pizza-pulse
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: pp-backend
+    app.kubernetes.io/name: pp-dashboard
   ports:
     - name: http
       port: 80
       targetPort: http
+

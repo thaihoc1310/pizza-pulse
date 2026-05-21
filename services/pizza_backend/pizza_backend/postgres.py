@@ -91,7 +91,7 @@ class PostgresOrderWriter:
 
     def write_order(self, order: NormalizedOrder) -> None:
         if not self._settings.postgres_password:
-            raise PostgresWriteError("POSTGRES_PASSWORD is required when POSTGRES_WRITE_ENABLED=true")
+            raise PostgresWriteError("POSTGRES_PASSWORD is required when PostgreSQL order writes are enabled")
 
         try:
             import psycopg

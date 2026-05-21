@@ -5,7 +5,7 @@ This service is the online backend edge for Pizza Pulse.
 It exposes:
 
 - `GET /pizzas`: read pizza catalog from PostgreSQL.
-- `POST /orders`: accept one order with many items, normalize it, publish one Kafka event to `pp.order.events`, and optionally write the same order into PostgreSQL tables from `sql/schema.sql`.
+- `POST /orders`: accept one order with many items, normalize it, write the same order into PostgreSQL tables from `sql/schema.sql`, update ingredient stock, and publish one Kafka event to `pp.order.events`.
 
 ## Order Input
 
@@ -70,7 +70,7 @@ The Kafka value is JSON:
 | `KAFKA_BOOTSTRAP_SERVERS` | `pp-kafka-kafka-bootstrap:9092` |
 | `KAFKA_ORDER_TOPIC` | `pp.order.events` |
 | `KAFKA_CLIENT_ID` | `pizza-backend` |
-| `POSTGRES_WRITE_ENABLED` | `false` |
+| `POSTGRES_WRITE_ENABLED` | `true` |
 | `POSTGRES_HOST` | `pp-postgre-postgresql` |
 | `POSTGRES_PORT` | `5432` |
 | `POSTGRES_DB` | `pizza_serving` |
@@ -80,7 +80,7 @@ The Kafka value is JSON:
 
 `GET /pizzas` always reads PostgreSQL and does not depend on `POSTGRES_WRITE_ENABLED`.
 
-PostgreSQL order writes are disabled by default. Enable them with `POSTGRES_WRITE_ENABLED=true`, or override per order request with `?persist_postgres=true`.
+PostgreSQL order writes are enabled by default. Disable them with `POSTGRES_WRITE_ENABLED=false`, or override per order request with `?persist_postgres=false`.
 
 When PostgreSQL order persistence is enabled, the writer also updates `ingredients.current_stock` from `pizza_ingredients.unit_amount`. It uses the existing `order_items` row to compute a quantity delta, so retrying the same `order_details_id` does not decrement ingredient stock twice.
 

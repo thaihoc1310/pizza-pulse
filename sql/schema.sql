@@ -42,3 +42,56 @@ CREATE TABLE IF NOT EXISTS pizza_ingredients (
 
     PRIMARY KEY (pizza_id, ingredient_id)
 );
+
+CREATE TABLE IF NOT EXISTS online_hourly_demand (
+    order_hour TIMESTAMP NOT NULL,
+    pizza_id TEXT NOT NULL REFERENCES pizza(pizza_id),
+    pizza_name TEXT,
+    pizza_size TEXT,
+    pizza_category TEXT,
+
+    quantity NUMERIC(12, 2) NOT NULL,
+    revenue NUMERIC(12, 2) NOT NULL,
+    order_count BIGINT NOT NULL,
+    last_event_ts TIMESTAMP,
+
+    updated_at TIMESTAMP DEFAULT now(),
+    PRIMARY KEY (order_hour, pizza_id)
+);
+
+CREATE TABLE IF NOT EXISTS demand_predictions (
+    target_hour TIMESTAMP NOT NULL,
+    pizza_id TEXT NOT NULL REFERENCES pizza(pizza_id),
+    pizza_name TEXT,
+    pizza_size TEXT,
+    pizza_category TEXT,
+
+    predicted_quantity NUMERIC(12, 4) NOT NULL,
+    model_name TEXT NOT NULL,
+    model_alias TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    predicted_at TIMESTAMP NOT NULL,
+    feature_json JSONB,
+
+    updated_at TIMESTAMP DEFAULT now(),
+    PRIMARY KEY (target_hour, pizza_id)
+);
+
+CREATE TABLE IF NOT EXISTS ingredient_risk_predictions (
+    target_hour TIMESTAMP NOT NULL,
+    ingredient_id INT NOT NULL REFERENCES ingredients(ingredient_id),
+    ingredient_name TEXT NOT NULL,
+
+    predicted_usage NUMERIC(12, 4) NOT NULL,
+    current_stock NUMERIC(12, 4) NOT NULL,
+    projected_stock NUMERIC(12, 4) NOT NULL,
+    severity TEXT NOT NULL,
+
+    model_name TEXT NOT NULL,
+    model_alias TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    predicted_at TIMESTAMP NOT NULL,
+
+    updated_at TIMESTAMP DEFAULT now(),
+    PRIMARY KEY (target_hour, ingredient_id)
+);

@@ -305,9 +305,52 @@ kubectl apply -f backend.yaml -n pizza-pulse
 kubectl -n pizza-pulse rollout status deployment/pp-backend
 ```
 
-By default, `POST /orders` writes only to Kafka topic `pp.order.events`. PostgreSQL order writes are implemented but disabled with `POSTGRES_WRITE_ENABLED=false` in `backend.yaml`. `GET /pizzas` always reads PostgreSQL.
+By default, `POST /orders` writes to PostgreSQL `orders`/`order_items`, updates ingredient stock, and publishes Kafka topic `pp.order.events`. `GET /pizzas` always reads PostgreSQL.
 
-## 14. Port Forward
+## 14. Deploy Streaming Inference And Dashboard
+
+Build and push the streaming image:
+
+```bash
+cd ..
+docker build -t thaihoc285/ppstreaming-pipeline:0.0.1 jobs/streaming_pipeline
+docker push thaihoc285/ppstreaming-pipeline:0.0.1
+cd helm-value
+```
+
+The streaming image includes the Spark Kafka connector jars. This avoids Spark Operator/Ivy resolving `--packages` during submission.
+
+Start Spark Structured Streaming:
+
+```bash
+kubectl apply -f ../spark-apps/pizza-streaming-inference.yaml -n pizza-pulse
+kubectl -n pizza-pulse get sparkapplication pizza-streaming-inference
+```
+
+If Spark fails with `NoSuchBucket` for `s3a://pp-spark-checkpoints/pizza-streaming-inference`, create the checkpoint bucket first:
+
+```bash
+kubectl -n pizza-pulse run minio-mc --rm -it --restart=Never \
+  --image=quay.io/minio/mc --command -- sh -c \
+  'mc alias set pp http://pp-minio:9000 admin minio123 &&
+   mc mb --ignore-existing pp/pp-spark-checkpoints &&
+   mc ls pp'
+```
+
+Build and deploy the Streamlit dashboard:
+
+```bash
+cd ..
+docker build -t thaihoc285/pp-dashboard:0.0.1 services/dashboard
+docker push thaihoc285/pp-dashboard:0.0.1
+cd helm-value
+kubectl apply -f dashboard.yaml -n pizza-pulse
+kubectl -n pizza-pulse rollout status deployment/pp-dashboard
+```
+
+The dashboard reads PostgreSQL serving tables populated by streaming. Spark also publishes prediction events to `pp.demand.predictions` and ingredient alert events to `pp.ingredient.alerts`.
+
+## 15. Port Forward
 
 Use the repo-root script to forward services for local access. If you are in `helm-value/`, run:
 
@@ -328,6 +371,7 @@ Default local endpoints:
 | Kafka UI | `http://localhost:8082` |
 | Airflow API Server | `http://localhost:8080` |
 | Backend API | `http://localhost:8083` |
+| Dashboard | `http://localhost:8501` |
 
 Stop port-forwarding:
 
@@ -346,7 +390,7 @@ scripts/pizza-backend-client.py publish-order --input services/pizza_backend/exa
 scripts/pizza-backend-client.py publish-order
 ```
 
-## 15. Useful Commands
+## 16. Useful Commands
 
 Show all resources in the namespace:
 
@@ -383,7 +427,7 @@ kubectl run jar-check \
   -- bash -lc "ls -l /opt/spark/jars"
 ```
 
-## 16. Cleanup
+## 17. Cleanup
 
 Stop port-forwarding first:
 
@@ -397,6 +441,8 @@ Delete Kafka custom resources before uninstalling the Strimzi operator:
 kubectl delete -f KafkaTopic.yaml -n pizza-pulse --ignore-not-found
 kubectl delete -f Kafka.yaml -n pizza-pulse --ignore-not-found
 kubectl delete -f backend.yaml -n pizza-pulse --ignore-not-found
+kubectl delete -f dashboard.yaml -n pizza-pulse --ignore-not-found
+kubectl delete -f ../spark-apps/pizza-streaming-inference.yaml -n pizza-pulse --ignore-not-found
 ```
 
 Uninstall releases:

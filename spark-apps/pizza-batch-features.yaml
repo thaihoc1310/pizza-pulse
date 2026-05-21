@@ -7,7 +7,7 @@ spec:
   type: Python
   mode: cluster
 
-  image: manhhung1685/ppbatch-pipeline:0.0.1
+  image: thaihoc285/ppbatch-pipeline:0.0.1
   imagePullPolicy: Always
 
   mainApplicationFile: local:///opt/spark/jobs/feature_engineering.py

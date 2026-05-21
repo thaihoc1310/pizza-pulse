@@ -42,7 +42,7 @@ class Settings:
             kafka_order_topic=os.getenv("KAFKA_ORDER_TOPIC", "pp.order.events"),
             kafka_client_id=os.getenv("KAFKA_CLIENT_ID", "pizza-backend"),
             kafka_flush_timeout_seconds=env_float("KAFKA_FLUSH_TIMEOUT_SECONDS", 10.0),
-            postgres_write_enabled=env_bool("POSTGRES_WRITE_ENABLED", False),
+            postgres_write_enabled=env_bool("POSTGRES_WRITE_ENABLED", True),
             postgres_host=os.getenv("POSTGRES_HOST", "pp-postgre-postgresql"),
             postgres_port=int(os.getenv("POSTGRES_PORT", "5432")),
             postgres_db=os.getenv("POSTGRES_DB", "pizza_serving"),

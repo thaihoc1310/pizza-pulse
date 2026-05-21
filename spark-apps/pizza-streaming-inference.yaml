@@ -1,20 +1,24 @@
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: "pizza-batch-etl-{{ ts_nodash | lower }}-try{{ ti.try_number }}"
+  name: pizza-streaming-inference
   namespace: pizza-pulse
 spec:
   type: Python
   mode: cluster
 
-  image: thaihoc285/ppbatch-pipeline:0.0.1
+  image: thaihoc285/ppstreaming-pipeline:0.0.1
   imagePullPolicy: Always
 
-  mainApplicationFile: local:///opt/spark/jobs/etl_orders.py
+  mainApplicationFile: local:///opt/spark/jobs/pizza_streaming_inference.py
   sparkVersion: "3.5.0"
 
   restartPolicy:
-    type: Never
+    type: Always
+    onFailureRetries: 3
+    onFailureRetryInterval: 30
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 30
 
   sparkConf:
     spark.kubernetes.executor.deleteOnTermination: "false"
@@ -22,9 +26,9 @@ spec:
 
   driver:
     cores: 1
-    memory: "1g"
+    memory: "2g"
     serviceAccount: pp-spark-operator-spark
-    env: &batchEnv
+    env: &streamingEnv
       - name: POSTGRES_HOST
         value: pp-postgre-postgresql
       - name: POSTGRES_PORT
@@ -38,6 +42,17 @@ spec:
           secretKeyRef:
             name: pp-postgre-postgresql
             key: postgres-password
+
+      - name: KAFKA_BOOTSTRAP_SERVERS
+        value: pp-kafka-kafka-bootstrap:9092
+      - name: KAFKA_ORDER_TOPIC
+        value: pp.order.events
+      - name: KAFKA_PREDICTION_TOPIC
+        value: pp.demand.predictions
+      - name: KAFKA_INGREDIENT_ALERT_TOPIC
+        value: pp.ingredient.alerts
+      - name: KAFKA_STARTING_OFFSETS
+        value: latest
 
       - name: MINIO_ENDPOINT
         value: http://pp-minio:9000
@@ -64,13 +79,30 @@ spec:
 
       - name: LAKEHOUSE_ROOT
         value: s3a://pp-lakehouse
+      - name: STREAMING_CHECKPOINT_LOCATION
+        value: s3a://pp-spark-checkpoints/pizza-streaming-inference
       - name: PIPELINE_TIMEZONE
         value: Asia/Ho_Chi_Minh
-      - name: BATCH_RUN_TAG
-        value: "{{ ts_nodash | lower }}"
+
+      - name: MLFLOW_TRACKING_URI
+        value: http://pp-mlflow:80
+      - name: MLFLOW_S3_ENDPOINT_URL
+        value: http://pp-minio:9000
+      - name: MLFLOW_S3_IGNORE_TLS
+        value: "true"
+      - name: AWS_DEFAULT_REGION
+        value: us-east-1
+      - name: MODEL_NAME
+        value: pizza_hourly_demand
+      - name: MODEL_ALIAS
+        value: champion
+      - name: MODEL_REFRESH_SECONDS
+        value: "60"
+      - name: STREAMING_TRIGGER_PROCESSING_TIME
+        value: "15 seconds"
 
   executor:
     instances: 3
     cores: 1
-    memory: "1g"
-    env: *batchEnv
+    memory: "2g"
+    env: *streamingEnv

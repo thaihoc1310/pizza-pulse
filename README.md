@@ -16,7 +16,9 @@ That guide covers the required Helm repositories, namespace creation, PostgreSQL
 - `airflow/dags/`: Airflow DAGs
 - `spark-apps/`: SparkApplication manifests
 - `jobs/`: Spark job code and Dockerfiles
+- `jobs/streaming_pipeline/`: Spark Structured Streaming inference job
 - `services/pizza_backend/`: FastAPI backend for pizza catalog and online order ingestion
+- `services/dashboard/`: Streamlit realtime dashboard
 - `sql/`: Database schema
 - `dataset/`: Local sample data
 - `scripts/`: Local helper scripts
@@ -48,7 +50,7 @@ If you use a different registry or tag, update the image in `airflow/dags/pizza_
 - `GET /pizzas` lists the pizza catalog from PostgreSQL.
 - `POST /orders` accepts an order with one or more line items.
 - The service publishes normalized JSON to Kafka topic `pp.order.events`.
-- PostgreSQL writes to `orders`, `order_items`, and ingredient stock are available but disabled by default with `POSTGRES_WRITE_ENABLED=false`.
+- The service writes to PostgreSQL `orders`, `order_items`, and ingredient stock by default.
 - `scripts/pizza-backend-client.py` can list pizzas, publish a JSON order, or generate demo orders interactively through the backend API.
 
 Build the image:
@@ -65,3 +67,30 @@ kubectl apply -f helm-value/backend.yaml -n pizza-pulse
 ```
 
 See [services/pizza_backend/README.md](services/pizza_backend/README.md) for payload examples and local commands.
+
+## Streaming Inference And Dashboard
+
+The online path consumes order events from Kafka, loads the MLflow champion model, writes serving tables to PostgreSQL, publishes prediction/alert events to Kafka, and serves a Streamlit dashboard.
+
+Build and push the streaming image:
+
+```bash
+docker build -t thaihoc285/ppstreaming-pipeline:0.0.1 jobs/streaming_pipeline
+docker push thaihoc285/ppstreaming-pipeline:0.0.1
+```
+
+The streaming image bakes the Spark Kafka connector jars into `/opt/spark/jars`, so the SparkApplication does not use `deps.packages` at submit time.
+
+Deploy streaming:
+
+```bash
+kubectl apply -f spark-apps/pizza-streaming-inference.yaml -n pizza-pulse
+```
+
+Build and push the dashboard image:
+
+```bash
+docker build -t thaihoc285/pp-dashboard:0.0.1 services/dashboard
+docker push thaihoc285/pp-dashboard:0.0.1
+kubectl apply -f helm-value/dashboard.yaml -n pizza-pulse
+```

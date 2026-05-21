@@ -8,7 +8,7 @@ from kubernetes.client import models as k8s
 
 NAMESPACE = "pizza-pulse"
 KUBERNETES_CONN_ID = "kubernetes_default"
-BATCH_IMAGE = "manhhung1685/ppbatch-pipeline:0.0.1"
+BATCH_IMAGE = "thaihoc285/ppbatch-pipeline:0.0.1"
 
 SPARK_APPLICATIONS = {
     "etl_orders": {
@@ -29,7 +29,7 @@ def spark_application_task(task_id: str, application_file: str) -> SparkKubernet
         do_xcom_push=False,
         random_name_suffix=False,
         get_logs=True,
-        delete_on_termination=True,
+        delete_on_termination=False,
         reattach_on_restart=False,
     )
 
