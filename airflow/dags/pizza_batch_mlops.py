@@ -9,6 +9,7 @@ from kubernetes.client import models as k8s
 NAMESPACE = "pizza-pulse"
 KUBERNETES_CONN_ID = "kubernetes_default"
 BATCH_IMAGE = "thaihoc285/ppbatch-pipeline:0.0.1"
+WEEKLY_RETRAIN_SCHEDULE = "0 2 * * 1"
 
 SPARK_APPLICATIONS = {
     "etl_orders": {
@@ -101,7 +102,7 @@ def python_batch_pod(
 with DAG(
     dag_id="pizza_batch_mlops",
     start_date=datetime(2026, 1, 1),
-    schedule=None,
+    schedule=WEEKLY_RETRAIN_SCHEDULE,
     catchup=False,
     max_active_runs=1,
     default_args={"retries": 1, "retry_delay": timedelta(minutes=5)},
